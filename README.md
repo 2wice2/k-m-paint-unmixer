@@ -46,8 +46,25 @@ Open http://localhost:3050/.
 
 ```sh
 npm run tauri:dev       # native window, hot reload
-npm run tauri:build     # produces a signed installer under src-tauri/target/release/bundle/
+npm run tauri:build     # produces an installer under src-tauri/target/release/bundle/
 ```
+
+## Cutting a release
+
+Cross-platform installers are built on GitHub Actions
+([`.github/workflows/release.yml`](.github/workflows/release.yml)).
+
+```sh
+# bump version in package.json and src-tauri/tauri.conf.json, then:
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Pushing the tag kicks off a matrix build on Windows, macOS
+(universal — Intel + Apple Silicon), and Ubuntu 22.04, and publishes a draft
+Release with the `.msi` / `.exe` / `.dmg` / `.deb` / `.AppImage` attached.
+Review the draft under the repo's **Releases** tab and click **Publish** to
+make it public.
 
 ## Project layout
 
