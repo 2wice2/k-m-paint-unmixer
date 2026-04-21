@@ -1,0 +1,5 @@
+{
+  "name": "K-M Paint Unmixer",
+  "description": "A perceptually-driven, physically-based paint unmixing system using Kubelka-Munk theory and Gemini AI.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Env files (may contain API keys). Keep .env.example if you ever add one.
+.env
+.env.*
+!.env.example
+
+# Tauri / Rust build output — contains absolute paths from this machine.
+src-tauri/target/
+src-tauri/gen/
+
+# Local agent / IDE config
+.claude/
+
+# Raw spectral source data (Golden Artist Colors). Derived numbers live in
+# constants.ts; drop the originals from the public repo unless you're sure
+# you can redistribute them.
+*.xlsx
+Golden CIELAB Values.csv
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
