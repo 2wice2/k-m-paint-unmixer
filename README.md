@@ -5,10 +5,6 @@ Enter any target sRGB colour (hex, eyedropper, uploaded image) and the solver
 returns a pigment mixture that reproduces it, honouring a user-chosen cap on
 how many paints may appear in the recipe.
 
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 ## How it works
 
 - **Data source**: measured K/S values from Golden HB 10-mil drawdowns over
