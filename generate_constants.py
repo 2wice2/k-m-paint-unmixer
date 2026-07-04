@@ -145,6 +145,159 @@ def fit_pigment_ks(ks_mass_internal, tints_internal, k_white, s_white=1.0):
     return k_out, s_out
 
 
+# --- Calibration against fully-opaque CIELAB measurements ----------------------
+#
+# Golden also publishes CIELAB values for each paint measured BOTH as the 10-mil
+# thin film over white AND as a 6 mm fully-opaque sample ("Golden CIELAB
+# Values.xlsx"). The pair determines the two-constant optics without tint
+# drawdowns:
+#
+#   1. For a trial scattering power sX, the general Kubelka-Munk equation for a
+#      film of finite thickness over a backing of reflectance Rg,
+#
+#        R = (1 - Rg*(a - b*coth(b*sX))) / (a - Rg + b*coth(b*sX)),
+#        a = 1 + kX/sX,  b = sqrt(a^2 - 1),
+#
+#      inverts the measured film reflectance to absorption kX per wavelength
+#      (R is monotonic in kX -> bisection).
+#   2. Complete hiding depends only on k/s:  R_inf = 1 + q - sqrt(q^2 + 2q),
+#      q = kX/sX. Predict the 6 mm CIELAB from R_inf and pick the sX that
+#      matches the measured fully-opaque colour.
+#
+# The film data is reproduced exactly by construction; the opaque colour is the
+# extra information that masstone-over-white alone cannot provide (a phthalo or
+# dioxazine film reads L* ~25 over white but ~5 at complete hiding).
+#
+# All reflectances are Saunderson-corrected to internal values first; CIELAB is
+# computed for D65/10 deg to match Golden's data.
+
+D65_10NM = [
+    82.7549, 91.486, 93.4318, 86.6823, 104.865, 117.008, 117.812, 114.861,
+    115.923, 108.811, 109.354, 107.802, 104.790, 107.689, 104.405, 104.046,
+    100.000, 96.3342, 95.788, 88.6856, 90.0062, 89.5991, 87.6987, 83.2886,
+    83.6992, 80.0268, 80.2146, 82.2778, 78.2842, 69.7213, 71.6091,
+]
+CMF_1964_10NM = [  # CIE 1964 10-deg observer, 400-700 nm / 10 nm
+    (0.019110, 0.002004, 0.086011), (0.084736, 0.008756, 0.389366),
+    (0.204492, 0.021391, 0.972542), (0.314679, 0.038676, 1.553480),
+    (0.383734, 0.062077, 1.967280), (0.370702, 0.089456, 1.994800),
+    (0.302273, 0.128201, 1.745370), (0.195618, 0.185190, 1.317560),
+    (0.080507, 0.253589, 0.772125), (0.016172, 0.339133, 0.415254),
+    (0.003816, 0.460777, 0.218502), (0.037465, 0.606741, 0.112044),
+    (0.117749, 0.761757, 0.060709), (0.236491, 0.875211, 0.030451),
+    (0.376772, 0.961988, 0.013676), (0.529826, 0.991761, 0.003988),
+    (0.705224, 0.997340, 0.000000), (0.878655, 0.955552, 0.000000),
+    (1.014160, 0.868934, 0.000000), (1.118520, 0.777405, 0.000000),
+    (1.123990, 0.658341, 0.000000), (1.030480, 0.527963, 0.000000),
+    (0.856297, 0.398057, 0.000000), (0.647467, 0.283493, 0.000000),
+    (0.431567, 0.179828, 0.000000), (0.268329, 0.107633, 0.000000),
+    (0.152568, 0.060281, 0.000000), (0.081261, 0.031800, 0.000000),
+    (0.040851, 0.015905, 0.000000), (0.019941, 0.007749, 0.000000),
+    (0.009577, 0.003718, 0.000000),
+]
+_WEIGHTS = [(x * s, y * s, z * s) for (x, y, z), s in zip(CMF_1964_10NM, D65_10NM)]
+_SUM_Y = sum(w[1] for w in _WEIGHTS)
+_WHITEPOINT = tuple(100.0 * sum(w[i] for w in _WEIGHTS) / _SUM_Y for i in range(3))
+
+
+def reflectance_to_lab(refl):
+    """31-band measured reflectance (0-1, 400-700/10nm) -> CIELAB D65/10deg."""
+    X = Y = Z = 0.0
+    for r, (wx, wy, wz) in zip(refl, _WEIGHTS):
+        X += r * wx
+        Y += r * wy
+        Z += r * wz
+    k = 100.0 / _SUM_Y
+    xyz = (X * k, Y * k, Z * k)
+    def f(t):
+        return t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+    fx, fy, fz = (f(v / n) for v, n in zip(xyz, _WHITEPOINT))
+    return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+
+
+def delta_e(l1, l2):
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(l1, l2)))
+
+
+def film_reflectance(kx, sx, rg):
+    """Internal reflectance of a film (absorption kX, scattering sX) over a
+    backing of internal reflectance rg. Kubelka-Munk hyperbolic solution."""
+    if sx < 1e-6:  # pure absorber limit: R = Rg * exp(-2 kX)
+        return rg * math.exp(-2 * kx)
+    a = 1 + kx / sx
+    b = math.sqrt(max(a * a - 1, 1e-12))
+    bsx = b * sx
+    if bsx > 30:  # complete hiding
+        return a - b
+    coth = 1 / math.tanh(bsx) if bsx > 1e-9 else 1 / bsx
+    return (1 - rg * (a - b * coth)) / (a - rg + b * coth)
+
+
+def invert_film_kx(r_target, sx, rg):
+    """Solve film_reflectance(kx, sx, rg) = r_target for kx (monotonic)."""
+    lo, hi = 0.0, 2000.0
+    if film_reflectance(hi, sx, rg) > r_target:
+        return hi
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if film_reflectance(mid, sx, rg) > r_target:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def internal_to_spex(ri):
+    """Internal -> external reflectance with the specular component EXCLUDED
+    (Saunderson forward with k1 = 0; k2 keeps internal trapping). Golden's 6mm
+    fully-opaque CIELAB goes below the drawdown sheet's ~3.7% gloss floor
+    (e.g. Dioxazine L* 5.6 => R 0.6%), so those measurements are gloss-free."""
+    return ((1 - SAUNDERSON_K2) * ri) / (1 - SAUNDERSON_K2 * ri)
+
+
+def predicted_opaque_lab(kx31, sx):
+    r_inf = []
+    for kx in kx31:
+        q = kx / sx if sx > 1e-9 else 5000.0
+        r_inf.append(internal_to_spex(ks_to_reflectance(q)))
+    return reflectance_to_lab(r_inf)
+
+
+def fit_pigment_gamma(q31, opaque_lab):
+    """Fit a scalar gamma so that R_inf(gamma * q) matches the measured
+    fully-opaque CIELAB, where q(lambda) is the internal K/S of the 10-mil
+    film over white.
+
+    Why a single scalar and not (k, s) per wavelength: for dark transparent
+    pigments the film sits at the gloss floor, so the absolute k is not
+    identifiable from this data pair — a free per-pigment s just collapses to
+    noise and destroys tinting strength in mixtures. gamma > 1 means the white
+    card was showing through the drawdown (transparent pigment) and the true
+    complete-hiding colour is darker/stronger than the film suggests."""
+    def objective(g):
+        return delta_e(predicted_opaque_lab([g * q for q in q31], 1.0), opaque_lab)
+
+    grid = [10 ** (e / 8.0) for e in range(-5, 14)]  # ~0.24 .. ~42
+    best_i = min(range(len(grid)), key=lambda i: objective(grid[i]))
+    lo = grid[max(0, best_i - 1)]
+    hi = grid[min(len(grid) - 1, best_i + 1)]
+    phi = (math.sqrt(5) - 1) / 2
+    a, b = math.log(lo), math.log(hi)
+    c, d = b - phi * (b - a), a + phi * (b - a)
+    fc, fd = objective(math.exp(c)), objective(math.exp(d))
+    for _ in range(30):
+        if fc < fd:
+            b, d, fd = d, c, fc
+            c = b - phi * (b - a)
+            fc = objective(math.exp(c))
+        else:
+            a, c, fc = c, d, fd
+            d = a + phi * (b - a)
+            fd = objective(math.exp(d))
+    g = math.exp(0.5 * (a + b))
+    return g, objective(g)
+
+
 # --- Self-test ------------------------------------------------------------------
 
 
@@ -270,6 +423,130 @@ BASE_IDS = {'pw6', 'pw4', 'pbk9', 'pbk7', 'pbk11'}
 # Titanium White masstone K/S is not in the Golden sheet; must match constants.ts.
 PW6_STORED_KS = [0.05, 0.04, 0.03, 0.02, 0.01, 0.01, 0.01, 0.01,
                  0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+PW4_STORED_KS = [0.08, 0.07, 0.06, 0.05, 0.04, 0.04, 0.04, 0.04,
+                 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04]
+
+# Reflectance-sheet name -> CIELAB-sheet name (normalized lowercase), for the
+# abbreviations Golden used in the drawdown sheet.
+CIELAB_ALIAS = {
+    'bismuth vanadate yellow': 'bismuth vanadate',
+    'cad red dark': 'cadmium red dark',
+    'cad red light': 'cadmium red light',
+    'cad red medium': 'cadmium red medium',
+    'cad yellow dark': 'cadmium yellow dark',
+    'cad yellow medium': 'cadmium yellow medium',
+    'cad yellow primrose': 'cadmium yellow primrose',
+    'perm green light': 'permanent green light',
+    'phthalo blue gs': 'phthalo blue (green shade)',
+    'phthalo blue rs': 'phthalo blue (red shade)',
+    'phthalo green bs': 'phthalo green (blue shade)',
+    'phthalo green ys': 'phthalo green (yellow shade)',
+    'quin burnt orange': 'quinacridone burnt orange',
+    'quin crimson': 'quinacridone crimson',
+    'quin magenta': 'quinacridone magenta',
+    'quin nickel azo': 'quinacridone nickel azo gold',
+    'quin red': 'quinacridone red',
+    'quin red light': 'quinacridone red light',
+    'quin violet': 'quinacridone violet',
+    'turquoise': 'turquoise (phthalo)',
+}
+
+
+def _norm(name):
+    return ' '.join(str(name).strip().lower().split())
+
+
+def load_cielab(path):
+    """Parse Golden CIELAB Values.xlsx -> ({name: lab} thin film, {name: lab}
+    fully opaque), names normalized lowercase."""
+    import openpyxl
+    ws = openpyxl.load_workbook(path, read_only=True)['Sheet1']
+    thin, opaque = {}, {}
+    section = None
+    for row in ws.iter_rows(values_only=True):
+        vals = [c for c in row if c is not None]
+        if not vals:
+            continue
+        head = str(vals[0])
+        if head.startswith('10 mil'):
+            section = thin
+            continue
+        if head.startswith('6mm'):
+            section = opaque
+            continue
+        if head == 'Name' or section is None:
+            continue
+        if len(vals) >= 4 and all(isinstance(v, (int, float)) for v in vals[1:4]):
+            section[_norm(vals[0])] = tuple(float(v) for v in vals[1:4])
+    return thin, opaque
+
+
+def lookup_cielab(name, table):
+    n = _norm(name)
+    for key in (n, CIELAB_ALIAS.get(n), 'c.p. ' + n):
+        if key and key in table:
+            return table[key]
+    return None
+
+
+def load_reflectance31(path):
+    """Parse the drawdown sheet -> {sheet name: (31 measured reflectances 0-1,
+    stated CIELAB)} at 400-700/10nm."""
+    import openpyxl
+    ws = openpyxl.load_workbook(path, read_only=True)['Sheet1']
+    out = {}
+    for row in list(ws.iter_rows(values_only=True))[2:]:
+        data = list(row)
+        if data[0] is None or data[1] is None:
+            continue
+        refl = [float(data[6 + i]) / 100.0 for i in range(31)]
+        stated = tuple(float(v) for v in data[2:5])
+        out[str(data[1]).strip()] = (refl, stated)
+    return out
+
+
+def interp_16_to_31(vals16):
+    out = []
+    for i in range(31):
+        if i % 2 == 0:
+            out.append(vals16[i // 2])
+        else:
+            out.append(0.5 * (vals16[i // 2] + vals16[i // 2 + 1]))
+    return out
+
+
+def fit_white(stored_ks16, thin_lab, opaque_lab, rg_internal):
+    """Whites are absent from the drawdown sheet, so fit (kX shape scale, sX)
+    from their thin-film and fully-opaque CIELAB pair. The spectral shape of
+    k comes from the estimated masstone K/S curve in constants.ts."""
+    q31 = interp_16_to_31([stored_ks_to_internal_ks(v) for v in stored_ks16])
+
+    # Fit on L* only: the 6mm casting's b* is polluted by binder yellowing
+    # (opaque white measures b* 2.5 vs 1.67 thin), which otherwise drives the
+    # scattering estimate to absurd values.
+    def objective(alpha, sx):
+        kx31 = [alpha * q * sx for q in q31]
+        film = []
+        for kx in kx31:
+            ri = film_reflectance(kx, sx, rg_internal)
+            # thin-film sheet is specular-included (R floor ~3.7%)
+            rm = SAUNDERSON_K1 + ((1 - SAUNDERSON_K1) * (1 - SAUNDERSON_K2) * ri) / (1 - SAUNDERSON_K2 * ri)
+            film.append(rm)
+        d = abs(reflectance_to_lab(film)[0] - thin_lab[0])
+        d += abs(predicted_opaque_lab(kx31, sx)[0] - opaque_lab[0])
+        return d
+
+    best = (float('inf'), 1.0, 1.0)
+    for ae in range(-24, 9):
+        alpha = 10 ** (ae / 8.0)
+        for se in range(0, 21):
+            sx = 10 ** (se / 8.0)
+            d = objective(alpha, sx)
+            if d < best[0]:
+                best = (d, alpha, sx)
+    _, alpha, sx = best
+    kx31 = [alpha * q * sx for q in q31]
+    return kx31, sx, best[0]
 
 
 def lab_to_hex(L, a, b):
@@ -373,16 +650,77 @@ def write_constants(constants_path, block):
     print(f"wrote PIGMENT_KS_FIT ({block.count(chr(10)) - 1} pigments) into {constants_path}")
 
 
+def run_opaque_calibration(masstone_path, cielab_path, card):
+    """Fit two-constant (k, s) for every paint from its 10-mil-over-white
+    reflectance + fully-opaque CIELAB. Returns {pigment id: (k16, s16)}."""
+    _, ks_data = load_masstones(masstone_path)
+    refl = load_reflectance31(masstone_path)
+    thin_tbl, opaque_tbl = load_cielab(cielab_path)
+
+    # Validate colour tables against the sheet's own D65/10deg CIELAB columns.
+    errs = [delta_e(reflectance_to_lab(r), stated) for r, stated in refl.values()]
+    print(f"colour-table check vs sheet CIELAB: mean dE {sum(errs)/len(errs):.2f}, "
+          f"max {max(errs):.2f} over {len(errs)} paints", file=sys.stderr)
+
+    rg = measured_to_internal(card or 0.82)
+
+    DE_EMIT_MAX = 8.0  # beyond this the datasets likely disagree (formulation
+    #                    change between measurement eras) -> masstone fallback
+    fits = {}
+    skipped = []
+    print(f"\n{'paint':32s} {'gamma':>7s} {'dE_fit':>7s} {'dE_naive':>8s}", file=sys.stderr)
+    for name, (r_meas, _) in sorted(refl.items()):
+        op_lab = lookup_cielab(name, opaque_tbl)
+        if op_lab is None or name not in PIGMENT_MAP:
+            continue
+        pid, _ = PIGMENT_MAP[name]
+        q31 = [reflectance_to_ks(measured_to_internal(r)) for r in r_meas]
+        gamma, dE = fit_pigment_gamma(q31, op_lab)
+        naive = delta_e(predicted_opaque_lab(q31, 1.0), op_lab)
+        if dE > DE_EMIT_MAX:
+            skipped.append(f"{name} (dE {dE:.1f})")
+            continue
+        print(f"{name:32s} {gamma:7.2f} {dE:7.2f} {naive:8.2f}", file=sys.stderr)
+        fits[pid] = ([gamma * q31[i] for i in range(0, 31, 2)], [1.0] * 16)
+    if skipped:
+        print(f"\nkept masstone fallback (datasets disagree): {', '.join(skipped)}", file=sys.stderr)
+
+    # Whites are absent from the drawdown sheet; fit their k shape + scattering
+    # from the thin-film/opaque CIELAB pair, expressed relative to pw6 (s = 1).
+    kxw, sxw, werr = fit_white(
+        PW6_STORED_KS, lookup_cielab('Titanium White', thin_tbl),
+        lookup_cielab('Titanium White', opaque_tbl), rg)
+    fits['pw6'] = ([kx / sxw for kx in kxw[::2]], [1.0] * 16)
+    kxz, sxz, zerr = fit_white(
+        PW4_STORED_KS, lookup_cielab('Zinc White', thin_tbl),
+        lookup_cielab('Zinc White', opaque_tbl), rg)
+    z_rel = min(S_MAX, max(S_MIN, sxz / sxw))
+    fits['pw4'] = ([z_rel * kx / sxz for kx in kxz[::2]], [z_rel] * 16)
+    print(f"whites: pw6 (dE {werr:.2f}), pw4 s_rel={z_rel:.3f} (dE {zerr:.2f})", file=sys.stderr)
+    return fits
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--masstone', default='Reflectance Data for Golden HB 10 mil Drawdowns over White.xlsx')
     ap.add_argument('--tints', help='CSV of tint drawdowns (see module docstring)')
+    ap.add_argument('--cielab', help='Golden CIELAB Values.xlsx (thin film + fully-opaque sections) for opaque calibration')
+    ap.add_argument('--card', type=float, help='white card measured reflectance (default: grid search)')
     ap.add_argument('--write', metavar='CONSTANTS_TS', help='patch PIGMENT_KS_FIT into this constants.ts in place')
     ap.add_argument('--selftest', action='store_true', help='validate the fitting math on synthetic data')
     args = ap.parse_args()
 
     if args.selftest:
         selftest()
+        return
+
+    if args.cielab:
+        fits = run_opaque_calibration(args.masstone, args.cielab, args.card)
+        block = emit_fit_block(fits)
+        if args.write:
+            write_constants(args.write, block)
+        else:
+            print(block)
         return
 
     pigments_ts, ks_data = load_masstones(args.masstone)

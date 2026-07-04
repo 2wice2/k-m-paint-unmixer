@@ -33,17 +33,19 @@ const singleConstantL = (ids: string[], amounts: number[]): number => {
   );
 }
 
-// 1b. Fitted-data path: inject synthetic two-constant data for PB15 (strong
-//     red/green absorber, weak scatterer) and confirm the engine actually
-//     uses it in place of the masstone fallback, then restore.
+// 1b. Fitted-data path: inject different two-constant data for PB15 and
+//     confirm the engine actually uses PIGMENT_KS_FIT entries, then restore.
 {
+  const saved = PIGMENT_KS_FIT["pb15"];
+  delete PIGMENT_KS_FIT["pb15"];
   const before = predictMixture(["pb15", "pw6"], [0.1, 0.9]);
   PIGMENT_KS_FIT["pb15"] = {
     k: [1.2, 1.0, 0.8, 0.7, 1.5, 4, 8, 12, 14, 15, 15, 14, 13, 12, 12, 11],
     s: new Array(16).fill(0.05),
   };
   const after = predictMixture(["pb15", "pw6"], [0.1, 0.9]);
-  delete PIGMENT_KS_FIT["pb15"];
+  if (saved) PIGMENT_KS_FIT["pb15"] = saved;
+  else delete PIGMENT_KS_FIT["pb15"];
   check(
     "PIGMENT_KS_FIT takes precedence",
     Math.abs(after.lab.l - before.lab.l) > 2 && after.lab.b < -20,

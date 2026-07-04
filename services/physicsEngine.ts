@@ -45,12 +45,17 @@ const reflectanceToKS = (R: number): number => {
 // The Golden drawdowns were measured including the front-surface (gloss)
 // reflection — visible in the data as a hard K/S ceiling of ~12.5 (measured R
 // never drops below ~3.7%). K-M theory applies to the light *inside* the
-// film, so we strip the surface component before deriving K/S and add it back
-// when predicting: Rm = k1 + (1-k1)(1-k2)·Ri / (1 - k2·Ri).
+// film, so we strip the surface component before deriving K/S:
+//   Ri = (Rm - k1) / ((1-k1)(1-k2) + k2·(Rm - k1)).
 // k1 is set just BELOW the dataset's 3.7% reflectance floor: a larger, more
 // textbook value (0.04) would clamp saturated bands to Ri≈0 and turn
 // floor-level measurement noise into enormous K/S ratios.
-const SAUNDERSON_K1 = 0.03; // external surface reflection (measured included)
+//
+// Predictions go the other way with k1 = 0 (specular EXCLUDED): the solver
+// models paint at complete hiding viewed without glare, which is also the
+// convention of Golden's 6mm fully-opaque CIELAB data that PIGMENT_KS_FIT is
+// calibrated against (its darks reach L* ≈ 5, well below any gloss floor).
+const SAUNDERSON_K1 = 0.03; // external surface reflection in the measurements
 const SAUNDERSON_K2 = 0.6;  // internal diffuse reflection at the film surface
 
 const measuredToInternal = (Rm: number): number => {
@@ -59,9 +64,9 @@ const measuredToInternal = (Rm: number): number => {
   return Math.min(1, Math.max(0.0001, num / den));
 };
 
+// Internal -> external reflectance, gloss excluded (Saunderson forward, k1=0).
 const internalToMeasured = (Ri: number): number => {
-  return SAUNDERSON_K1 +
-    ((1 - SAUNDERSON_K1) * (1 - SAUNDERSON_K2) * Ri) / (1 - SAUNDERSON_K2 * Ri);
+  return ((1 - SAUNDERSON_K2) * Ri) / (1 - SAUNDERSON_K2 * Ri);
 };
 
 // --- Two-constant Kubelka–Munk pigment optics ---
