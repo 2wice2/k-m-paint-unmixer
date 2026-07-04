@@ -207,6 +207,27 @@ export const PHYSICAL_PIGMENT_DATA: Record<string, number[]> = {
   'pg_terre': [6.9932, 6.678, 6.7962, 6.7722, 6.3977, 5.5742, 4.4057, 3.801, 4.1, 4.7645, 5.4411, 6.0975, 6.3548, 6.3018, 5.7487, 4.918],
 };
 
+// --- Two-constant Kubelka–Munk optical data --------------------------------
+//
+// Measured two-constant data: absorption k(λ) and scattering s(λ) per unit
+// paint (internal units — Saunderson-corrected, s relative to Titanium
+// White ≡ 1.0), fitted from masstone + tint-with-white drawdowns by
+// `generate_constants.py --tints <file>`.
+//
+// Why this exists: single-constant K-M (mixing the masstone K/S curves
+// directly) implicitly assumes every paint scatters like every other, and the
+// masstone-over-white drawdowns of transparent pigments (phthalos,
+// quinacridones, dioxazine, azo yellows…) are corrupted by the white card
+// showing through. Both effects make mixture predictions drift. Tints with
+// white are measured at complete hiding, so k and s fitted from them are
+// clean. Pigments present here use the fitted two-constant model; pigments
+// absent fall back to their masstone K/S curve with s = 1 (equivalent to the
+// original single-constant behaviour, plus Saunderson correction).
+// BEGIN GENERATED PIGMENT_KS_FIT (do not edit by hand)
+export const PIGMENT_KS_FIT: Record<string, { k: number[]; s: number[] }> = {
+};
+// END GENERATED PIGMENT_KS_FIT
+
 export const INITIAL_SPECTRAL_DATA = WAVELENGTHS.map(wl => ({
   wavelength: wl,
   targetReflectance: 0.5,

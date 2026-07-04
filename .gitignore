@@ -40,3 +40,6 @@ Golden CIELAB Values.csv
 *.njsproj
 *.sln
 *.sw?
+
+# Python bytecode
+__pycache__/

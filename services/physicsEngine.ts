@@ -1,5 +1,5 @@
 import { Pigment, UnmixResult, RecipeComponent, SpectralPoint } from "../types";
-import { PHYSICAL_PIGMENT_DATA, WAVELENGTHS } from "../constants";
+import { PHYSICAL_PIGMENT_DATA, PIGMENT_KS_FIT, WAVELENGTHS } from "../constants";
 import { labToRgb, rgbToHex, rgbToLab } from "../utils/colorUtils";
 
 // --- Math Helpers & Optimization Tables ---
@@ -32,21 +32,74 @@ const SUM_Y_WEIGHTS = CIE_CMF_DATA.reduce((sum, cmf) => sum + cmf.y, 0);
 const NORMALIZATION_K = 100 / (SUM_Y_WEIGHTS || 1);
 
 const ksToReflectance = (KS: number): number => {
-  if (KS > 500) return 0; // Avoid NaN
+  if (KS > 5000) return 0.0001; // Avoid NaN
   return 1 + KS - Math.sqrt(Math.pow(KS, 2) + (2 * KS));
 };
 
-// Single-constant Kubelka–Munk mixing: (K/S)_mix = Σ c_i · (K/S)_i.
-// Valid because all pigments were measured as 10-mil drawdowns over the same
-// white substrate, so each K/S already embeds that pigment's own scattering.
-const calculateMixKS = (amounts: number[], pigmentKS: number[][]): number[] => {
-  const mixKS: number[] = new Array(pigmentKS[0].length).fill(0);
-  for (let w = 0; w < mixKS.length; w++) {
-    let sum = 0;
+const reflectanceToKS = (R: number): number => {
+  const r = Math.min(1, Math.max(0.0001, R));
+  return Math.pow(1 - r, 2) / (2 * r);
+};
+
+// --- Saunderson surface-reflection correction ---
+// The Golden drawdowns were measured including the front-surface (gloss)
+// reflection — visible in the data as a hard K/S ceiling of ~12.5 (measured R
+// never drops below ~3.7%). K-M theory applies to the light *inside* the
+// film, so we strip the surface component before deriving K/S and add it back
+// when predicting: Rm = k1 + (1-k1)(1-k2)·Ri / (1 - k2·Ri).
+// k1 is set just BELOW the dataset's 3.7% reflectance floor: a larger, more
+// textbook value (0.04) would clamp saturated bands to Ri≈0 and turn
+// floor-level measurement noise into enormous K/S ratios.
+const SAUNDERSON_K1 = 0.03; // external surface reflection (measured included)
+const SAUNDERSON_K2 = 0.6;  // internal diffuse reflection at the film surface
+
+const measuredToInternal = (Rm: number): number => {
+  const num = Rm - SAUNDERSON_K1;
+  const den = (1 - SAUNDERSON_K1) * (1 - SAUNDERSON_K2) + SAUNDERSON_K2 * num;
+  return Math.min(1, Math.max(0.0001, num / den));
+};
+
+const internalToMeasured = (Ri: number): number => {
+  return SAUNDERSON_K1 +
+    ((1 - SAUNDERSON_K1) * (1 - SAUNDERSON_K2) * Ri) / (1 - SAUNDERSON_K2 * Ri);
+};
+
+// --- Two-constant Kubelka–Munk pigment optics ---
+// Per pigment we need absorption K(λ) and scattering S(λ) separately, because
+// mixtures combine as K_mix = Σ c·K_i and S_mix = Σ c·S_i — NOT as a weighted
+// average of K/S ratios (that single-constant shortcut assumes every paint
+// scatters equally, which is badly wrong across TiO2 white vs. transparent
+// organics like phthalos and quinacridones).
+//
+// Preferred source: PIGMENT_KS_FIT — k,s fitted from masstone + tint
+// measurements (see generate_constants.py --tints). Fallback for pigments
+// without fitted data: the masstone K/S curve (Saunderson-corrected) with
+// s = 1 — i.e. the original single-constant assumption, which is the best
+// available guess when only the over-white masstone drawdown was measured.
+interface PigmentOptics { K: number[]; S: number[] }
+
+const buildOptics = (ksRow: number[], id: string): PigmentOptics => {
+  const fit = PIGMENT_KS_FIT[id];
+  if (fit && fit.k.length === ksRow.length) {
+    return { K: fit.k, S: fit.s };
+  }
+  const K = ksRow.map(ksStored =>
+    reflectanceToKS(measuredToInternal(ksToReflectance(ksStored)))
+  );
+  return { K, S: new Array(ksRow.length).fill(1) };
+};
+
+// Two-constant mixing: returns internal (K/S)_mix per wavelength.
+const calculateMixKS = (amounts: number[], optics: PigmentOptics[]): number[] => {
+  const nW = optics[0].K.length;
+  const mixKS: number[] = new Array(nW).fill(0);
+  for (let w = 0; w < nW; w++) {
+    let sumK = 0, sumS = 0;
     for (let i = 0; i < amounts.length; i++) {
-      sum += amounts[i] * pigmentKS[i][w];
+      sumK += amounts[i] * optics[i].K[w];
+      sumS += amounts[i] * optics[i].S[w];
     }
-    mixKS[w] = sum;
+    mixKS[w] = sumS > 1e-9 ? sumK / sumS : 5000;
   }
   return mixKS;
 };
@@ -165,19 +218,19 @@ export const solvePhysicsRecipe = async (
   const targetLab = rgbToLab(rgb.r, rgb.g, rgb.b);
 
   // 2. Prepare Palette Data
-  const activeKS: number[][] = [];
+  const activeOptics: PigmentOptics[] = [];
   const activeIds: string[] = [];
   const activePigments: Pigment[] = [];
-  
+
   palette.forEach(p => {
     if (PHYSICAL_PIGMENT_DATA[p.id]) {
-      activeKS.push(PHYSICAL_PIGMENT_DATA[p.id]);
+      activeOptics.push(buildOptics(PHYSICAL_PIGMENT_DATA[p.id], p.id));
       activeIds.push(p.id);
       activePigments.push(p);
     }
   });
 
-  if (activeKS.length === 0) throw new Error("No physical data for selected pigments.");
+  if (activeOptics.length === 0) throw new Error("No physical data for selected pigments.");
 
   const cap = Math.max(1, Math.min(maxPigments ?? activeIds.length, activeIds.length));
 
@@ -190,11 +243,16 @@ export const solvePhysicsRecipe = async (
   
   const whiteIdx = activeIds.findIndex(id => id === 'pw6' || id === 'pw4');
 
+  // Predicted *measured* reflectance of a composition: two-constant mix →
+  // internal reflectance → re-apply surface reflection (Saunderson forward).
+  const mixReflectance = (amounts: number[]): number[] => {
+    const mixKS = calculateMixKS(amounts, activeOptics);
+    return mixKS.map(ks => internalToMeasured(ksToReflectance(ks)));
+  };
+
   // Helper to test a composition
   const evaluate = (amounts: number[]) => {
-    const mixKS = calculateMixKS(amounts, activeKS);
-    const mixR = mixKS.map(ks => ksToReflectance(ks));
-    const mixLab = spectralToLab(mixR);
+    const mixLab = spectralToLab(mixReflectance(amounts));
     return calculateDeltaE(targetLab, mixLab);
   };
 
@@ -284,9 +342,7 @@ export const solvePhysicsRecipe = async (
     for (let k = 0; k < candidateAmounts.length; k++) candidateAmounts[k] = capped[k];
 
     // Evaluate
-    const ks = calculateMixKS(candidateAmounts, activeKS);
-    const rVals = ks.map(k => ksToReflectance(k));
-    const lab = spectralToLab(rVals);
+    const lab = spectralToLab(mixReflectance(candidateAmounts));
     const error = calculateDeltaE(targetLab, lab);
 
     // Greedy Step (Accept if better)
@@ -315,9 +371,8 @@ export const solvePhysicsRecipe = async (
   .filter(r => r.percentage > 0.5)
   .sort((a, b) => b.percentage - a.percentage);
 
-  const finalKS = calculateMixKS(bestAmounts, activeKS);
-  const finalR = finalKS.map(ks => ksToReflectance(ks));
-  
+  const finalR = mixReflectance(bestAmounts);
+
   const spectralData: SpectralPoint[] = WAVELENGTHS.map((wl, idx) => ({
     wavelength: wl,
     targetReflectance: targetSpectral[idx],
@@ -327,9 +382,7 @@ export const solvePhysicsRecipe = async (
   // Re-calc final lab/hex for display
   if (bestLab.l === 0) {
       // Recalculate if loop didn't update (rare)
-      const fKS = calculateMixKS(bestAmounts, activeKS);
-      const fR = fKS.map(k => ksToReflectance(k));
-      bestLab = spectralToLab(fR);
+      bestLab = spectralToLab(finalR);
   }
   const bestRgb = labToRgb(bestLab.l, bestLab.a, bestLab.b);
   const mixHex = rgbToHex(bestRgb.r, bestRgb.g, bestRgb.b);
@@ -338,7 +391,26 @@ export const solvePhysicsRecipe = async (
     recipe,
     deltaE: bestError,
     mixHex,
-    explanation: `Solved via Stochastic Hill Climbing with Smart Initialization. Starting point was optimized by testing pure pigments and tints before fine-tuning.`,
+    explanation: `Solved via Stochastic Hill Climbing with Smart Initialization over a two-constant Kubelka-Munk model (per-pigment absorption K and scattering S, Saunderson-corrected).`,
     spectralData
   };
+};
+
+// --- Direct forward prediction (used by tests; handy for recipe previews) ---
+// Given pigment ids and fractional amounts (summing to ~1), predict the
+// measured reflectance, Lab and sRGB hex of the physical mixture.
+export const predictMixture = (
+  pigmentIds: string[],
+  amounts: number[]
+): { reflectance: number[]; lab: { l: number; a: number; b: number }; hex: string } => {
+  const optics = pigmentIds.map(id => {
+    const ksRow = PHYSICAL_PIGMENT_DATA[id];
+    if (!ksRow) throw new Error(`No physical data for pigment '${id}'`);
+    return buildOptics(ksRow, id);
+  });
+  const mixKS = calculateMixKS(amounts, optics);
+  const reflectance = mixKS.map(ks => internalToMeasured(ksToReflectance(ks)));
+  const lab = spectralToLab(reflectance);
+  const rgb = labToRgb(lab.l, lab.a, lab.b);
+  return { reflectance, lab, hex: rgbToHex(rgb.r, rgb.g, rgb.b) };
 };
