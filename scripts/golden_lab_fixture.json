@@ -1,0 +1,1197 @@
+{
+ "pw6": {
+  "name": "Titanium White",
+  "lab": [
+   98.28,
+   -0.9,
+   1.67
+  ],
+  "gamma": 0.1,
+  "calibrated": true,
+  "opaqueLab": [
+   99.38,
+   -0.71,
+   2.5
+  ]
+ },
+ "pw4": {
+  "name": "Zinc White",
+  "lab": [
+   95.83,
+   -0.49,
+   0.56
+  ],
+  "gamma": 0.5623,
+  "calibrated": true,
+  "opaqueLab": [
+   96.56,
+   -0.96,
+   2.23
+  ]
+ },
+ "pw6_buff": {
+  "name": "Titan Buff",
+  "lab": [
+   85.4117,
+   0.9614,
+   15.2057
+  ],
+  "gamma": 1.1611,
+  "calibrated": true,
+  "opaqueLab": [
+   82.9,
+   1.22,
+   15.14
+  ]
+ },
+ "pbk9": {
+  "name": "Bone Black",
+  "lab": [
+   24.0311,
+   0.066,
+   -0.3317
+  ],
+  "gamma": 0.8358,
+  "calibrated": true,
+  "opaqueLab": [
+   11.69,
+   -0.12,
+   -0.47
+  ]
+ },
+ "pbk7": {
+  "name": "Carbon Black",
+  "lab": [
+   25.6535,
+   0.2411,
+   0.1434
+  ],
+  "gamma": 1.4827,
+  "calibrated": true,
+  "opaqueLab": [
+   10.23,
+   -0.17,
+   -0.31
+  ]
+ },
+ "pbk11": {
+  "name": "Mars Black",
+  "lab": [
+   25.4982,
+   0.3862,
+   0.0747
+  ],
+  "gamma": 1.238,
+  "calibrated": true,
+  "opaqueLab": [
+   11.47,
+   0.7,
+   0.63
+  ]
+ },
+ "pg_mix": {
+  "name": "Paynes Gray",
+  "lab": [
+   23.6871,
+   0.2293,
+   -2.9485
+  ],
+  "gamma": 0.3322,
+  "calibrated": true,
+  "opaqueLab": [
+   20.65,
+   0.01,
+   -3.0
+  ]
+ },
+ "pbr7_raw": {
+  "name": "Raw Umber",
+  "lab": [
+   29.2908,
+   1.8799,
+   4.256
+  ],
+  "gamma": 0.8168,
+  "calibrated": true,
+  "opaqueLab": [
+   23.1,
+   1.5,
+   3.64
+  ]
+ },
+ "pbr7_burnt": {
+  "name": "Burnt Umber",
+  "lab": [
+   27.3924,
+   3.2022,
+   3.3147
+  ],
+  "gamma": 0.7544,
+  "calibrated": true,
+  "opaqueLab": [
+   20.19,
+   5.26,
+   5.56
+  ]
+ },
+ "pbr7_burnt_lt": {
+  "name": "Burnt Umber Light",
+  "lab": [
+   29.2237,
+   6.9523,
+   6.4196
+  ],
+  "gamma": 0.7769,
+  "calibrated": true,
+  "opaqueLab": [
+   23.91,
+   8.56,
+   9.52
+  ]
+ },
+ "pbr7_sienna": {
+  "name": "Raw Sienna",
+  "lab": [
+   50.8851,
+   16.1519,
+   31.2062
+  ],
+  "gamma": 1.0087,
+  "calibrated": true,
+  "opaqueLab": [
+   47.61,
+   18.71,
+   40.99
+  ]
+ },
+ "pr101": {
+  "name": "Burnt Sienna",
+  "lab": [
+   33.7941,
+   17.1569,
+   13.0517
+  ],
+  "gamma": 0.8905,
+  "calibrated": true,
+  "opaqueLab": [
+   30.44,
+   18.67,
+   15.84
+  ]
+ },
+ "py43": {
+  "name": "Yellow Ochre",
+  "lab": [
+   57.1313,
+   17.8458,
+   39.4022
+  ],
+  "gamma": 1.0566,
+  "calibrated": true,
+  "opaqueLab": [
+   54.17,
+   19.33,
+   48.04
+  ]
+ },
+ "py42": {
+  "name": "Mars Yellow",
+  "lab": [
+   47.0842,
+   26.2717,
+   27.365
+  ],
+  "gamma": 1.0904,
+  "calibrated": true,
+  "opaqueLab": [
+   42.26,
+   30.67,
+   37.71
+  ]
+ },
+ "py42_ox": {
+  "name": "Yellow Oxide",
+  "lab": [
+   62.6047,
+   15.4302,
+   46.002
+  ],
+  "gamma": 1.005,
+  "calibrated": true,
+  "opaqueLab": [
+   60.59,
+   15.46,
+   54.02
+  ]
+ },
+ "pr101_ox": {
+  "name": "Red Oxide",
+  "lab": [
+   38.7536,
+   30.3919,
+   21.6795
+  ],
+  "gamma": 1.5491,
+  "calibrated": true,
+  "opaqueLab": [
+   30.32,
+   33.51,
+   28.29
+  ]
+ },
+ "pr101_vio": {
+  "name": "Violet Oxide",
+  "lab": [
+   32.194,
+   19.3147,
+   9.4365
+  ],
+  "gamma": 1.1548,
+  "calibrated": true,
+  "opaqueLab": [
+   22.03,
+   27.68,
+   17.17
+  ]
+ },
+ "pbr7_trans": {
+  "name": "Transparent Brown Iron Oxide",
+  "lab": [
+   29.067,
+   3.7177,
+   3.1233
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   12.07,
+   10.11,
+   11.33
+  ]
+ },
+ "pr101_trans": {
+  "name": "Transparent Red Iron Oxide",
+  "lab": [
+   32.6223,
+   14.9768,
+   9.1323
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   23.88,
+   24.07,
+   23.73
+  ]
+ },
+ "py42_trans": {
+  "name": "Transparent Yellow Iron Oxide",
+  "lab": [
+   47.7407,
+   16.9336,
+   26.8077
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   46.51,
+   15.4,
+   41.76
+  ]
+ },
+ "pbr_vd": {
+  "name": "Van Dyke Brown Hue",
+  "lab": [
+   25.1097,
+   0.454,
+   0.6312
+  ],
+  "gamma": 1.4822,
+  "calibrated": true,
+  "opaqueLab": [
+   9.02,
+   2.12,
+   4.6
+  ]
+ },
+ "py3": {
+  "name": "Hansa Yellow Light",
+  "lab": [
+   87.7526,
+   -3.9018,
+   88.7411
+  ],
+  "gamma": 1.6224,
+  "calibrated": true,
+  "opaqueLab": [
+   89.73,
+   -1.71,
+   105.5
+  ]
+ },
+ "py73": {
+  "name": "Hansa Yellow Medium",
+  "lab": [
+   78.6762,
+   19.4212,
+   90.4851
+  ],
+  "gamma": 0.9171,
+  "calibrated": true,
+  "opaqueLab": [
+   78.24,
+   16.94,
+   111.31
+  ]
+ },
+ "py35_lt": {
+  "name": "Cadmium Yellow Light",
+  "lab": [
+   88.8915,
+   -2.3459,
+   94.1684
+  ],
+  "gamma": 1.0488,
+  "calibrated": true,
+  "opaqueLab": [
+   90.95,
+   -2.03,
+   106.38
+  ]
+ },
+ "py35": {
+  "name": "Cadmium Yellow Medium",
+  "lab": [
+   84.0846,
+   15.446,
+   95.3047
+  ],
+  "gamma": 0.97,
+  "calibrated": true,
+  "opaqueLab": [
+   84.67,
+   14.85,
+   111.12
+  ]
+ },
+ "py35_dk": {
+  "name": "Cadmium Yellow Dark",
+  "lab": [
+   79.0252,
+   26.4826,
+   88.1167
+  ],
+  "gamma": 0.8406,
+  "calibrated": true,
+  "opaqueLab": [
+   77.37,
+   27.01,
+   101.02
+  ]
+ },
+ "py35_prim": {
+  "name": "Cadmium Yellow Primrose",
+  "lab": [
+   90.9781,
+   -10.4873,
+   84.4754
+  ],
+  "gamma": 0.8758,
+  "calibrated": true,
+  "opaqueLab": [
+   91.09,
+   -10.44,
+   90.24
+  ]
+ },
+ "py184": {
+  "name": "Bismuth Vanadate Yellow",
+  "lab": [
+   90.2079,
+   -3.9216,
+   91.2348
+  ],
+  "gamma": 0.9369,
+  "calibrated": true,
+  "opaqueLab": [
+   90.39,
+   -3.97,
+   99.7
+  ]
+ },
+ "py83": {
+  "name": "Diarylide Yellow",
+  "lab": [
+   75.8244,
+   34.3257,
+   81.6942
+  ],
+  "gamma": 1.384,
+  "calibrated": true,
+  "opaqueLab": [
+   75.43,
+   35.68,
+   102.3
+  ]
+ },
+ "py53": {
+  "name": "Titanate Yellow",
+  "lab": [
+   89.446,
+   -6.9038,
+   56.8447
+  ],
+  "gamma": 1.0951,
+  "calibrated": true,
+  "opaqueLab": [
+   89.69,
+   -7.5,
+   61.88
+  ]
+ },
+ "py150": {
+  "name": "Nickel Azo Yellow",
+  "lab": [
+   51.1951,
+   16.3012,
+   41.5359
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   49.27,
+   9.5,
+   59.94
+  ]
+ },
+ "py129": {
+  "name": "Green Gold",
+  "lab": [
+   45.6373,
+   -11.9911,
+   31.5097
+  ],
+  "gamma": 1.0283,
+  "calibrated": true,
+  "opaqueLab": [
+   40.3,
+   -15.93,
+   44.62
+  ]
+ },
+ "po20": {
+  "name": "Cadmium Orange",
+  "lab": [
+   63.6474,
+   54.1352,
+   64.0936
+  ],
+  "gamma": 1.4433,
+  "calibrated": true,
+  "opaqueLab": [
+   62.31,
+   58.2,
+   86.2
+  ]
+ },
+ "po73": {
+  "name": "Pyrrole Orange",
+  "lab": [
+   56.1903,
+   60.8562,
+   54.2233
+  ],
+  "gamma": 1.5276,
+  "calibrated": true,
+  "opaqueLab": [
+   53.54,
+   65.74,
+   78.33
+  ]
+ },
+ "po73_trans": {
+  "name": "Transparent Pyrrole Orange",
+  "lab": [
+   49.1181,
+   55.1757,
+   41.7381
+  ],
+  "gamma": 3.1415,
+  "calibrated": true,
+  "opaqueLab": [
+   40.11,
+   53.56,
+   56.51
+  ]
+ },
+ "py_indian": {
+  "name": "Indian Yellow Hue",
+  "lab": [
+   53.9198,
+   30.8574,
+   47.6601
+  ],
+  "gamma": 0.9066,
+  "calibrated": true,
+  "opaqueLab": [
+   49.21,
+   28.67,
+   65.99
+  ]
+ },
+ "pr254": {
+  "name": "Pyrrole Red",
+  "lab": [
+   42.4217,
+   55.2668,
+   31.8041
+  ],
+  "gamma": 1.2239,
+  "calibrated": true,
+  "opaqueLab": [
+   39.06,
+   64.97,
+   55.65
+  ]
+ },
+ "pr254_lt": {
+  "name": "Pyrrole Red Light",
+  "lab": [
+   47.0965,
+   57.1416,
+   37.8768
+  ],
+  "gamma": 1.2479,
+  "calibrated": true,
+  "opaqueLab": [
+   44.65,
+   65.95,
+   60.39
+  ]
+ },
+ "pr254_dk": {
+  "name": "Pyrrole Red Dark",
+  "lab": [
+   37.4463,
+   45.142,
+   21.8642
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   32.06,
+   58.65,
+   42.21
+  ]
+ },
+ "pr108_lt": {
+  "name": "Cadmium Red Light",
+  "lab": [
+   51.5778,
+   59.3564,
+   43.4868
+  ],
+  "gamma": 1.2679,
+  "calibrated": true,
+  "opaqueLab": [
+   48.45,
+   64.75,
+   61.21
+  ]
+ },
+ "pr108": {
+  "name": "Cadmium Red Medium",
+  "lab": [
+   42.4416,
+   50.1614,
+   27.6547
+  ],
+  "gamma": 1.2567,
+  "calibrated": true,
+  "opaqueLab": [
+   37.99,
+   59.48,
+   44.2
+  ]
+ },
+ "pr108_dk": {
+  "name": "Cadmium Red Dark",
+  "lab": [
+   38.3462,
+   43.4472,
+   20.2298
+  ],
+  "gamma": 1.1703,
+  "calibrated": true,
+  "opaqueLab": [
+   32.89,
+   54.58,
+   33.9
+  ]
+ },
+ "pr112": {
+  "name": "Naphthol Red Light",
+  "lab": [
+   46.9015,
+   54.1504,
+   36.6665
+  ],
+  "gamma": 1.9786,
+  "calibrated": true,
+  "opaqueLab": [
+   38.82,
+   58.99,
+   55.91
+  ]
+ },
+ "pr112_med": {
+  "name": "Naphthol Red Medium",
+  "lab": [
+   37.1918,
+   40.6303,
+   21.5969
+  ],
+  "gamma": 1.2451,
+  "calibrated": true,
+  "opaqueLab": [
+   28.92,
+   50.68,
+   40.0
+  ]
+ },
+ "pv19": {
+  "name": "Quinacridone Red",
+  "lab": [
+   36.3232,
+   40.3082,
+   15.1989
+  ],
+  "gamma": 0.9788,
+  "calibrated": true,
+  "opaqueLab": [
+   30.73,
+   51.31,
+   25.51
+  ]
+ },
+ "pv19_lt": {
+  "name": "Quinacridone Red Light",
+  "lab": [
+   41.8174,
+   44.9982,
+   20.8537
+  ],
+  "gamma": 1.2748,
+  "calibrated": true,
+  "opaqueLab": [
+   35.58,
+   50.8,
+   30.2
+  ]
+ },
+ "pr122": {
+  "name": "Quinacridone Magenta",
+  "lab": [
+   31.1919,
+   28.3637,
+   4.1431
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   18.22,
+   38.26,
+   22.95
+  ]
+ },
+ "pr177": {
+  "name": "Alizarin Crimson Hue",
+  "lab": [
+   27.9999,
+   10.7729,
+   2.8572
+  ],
+  "gamma": 1.63,
+  "calibrated": true,
+  "opaqueLab": [
+   11.83,
+   19.06,
+   5.45
+  ]
+ },
+ "pr206": {
+  "name": "Quinacridone Crimson",
+  "lab": [
+   26.1715,
+   11.9602,
+   2.9238
+  ],
+  "gamma": 1.0731,
+  "calibrated": true,
+  "opaqueLab": [
+   12.03,
+   26.3,
+   1.85
+  ]
+ },
+ "po49": {
+  "name": "Quinacridone Burnt Orange",
+  "lab": [
+   29.0357,
+   14.553,
+   7.028
+  ],
+  "gamma": 1.7545,
+  "calibrated": true,
+  "opaqueLab": [
+   14.93,
+   20.72,
+   8.2
+  ]
+ },
+ "py150_qn": {
+  "name": "Quinacridone Nickel Azo",
+  "lab": [
+   36.4711,
+   20.9487,
+   18.8502
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   23.98,
+   20.67,
+   13.46
+  ]
+ },
+ "pr179": {
+  "name": "Permanent Maroon",
+  "lab": [
+   26.7891,
+   5.2215,
+   0.0304
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   7.76,
+   12.81,
+   25.66
+  ]
+ },
+ "pv23": {
+  "name": "Dioxazine Purple",
+  "lab": [
+   25.2101,
+   2.2096,
+   0.9802
+  ],
+  "gamma": 2.6362,
+  "calibrated": true,
+  "opaqueLab": [
+   5.63,
+   2.84,
+   -0.14
+  ]
+ },
+ "pv23_dk": {
+  "name": "Permanent Violet Dark",
+  "lab": [
+   26.6158,
+   7.8443,
+   -5.9845
+  ],
+  "gamma": 1.5227,
+  "calibrated": true,
+  "opaqueLab": [
+   9.22,
+   17.92,
+   -10.93
+  ]
+ },
+ "pv19_vio": {
+  "name": "Quinacridone Violet",
+  "lab": [
+   29.7422,
+   25.3452,
+   7.2132
+  ],
+  "gamma": 1.1452,
+  "calibrated": true,
+  "opaqueLab": [
+   18.55,
+   39.55,
+   18.65
+  ]
+ },
+ "pb29": {
+  "name": "Ultramarine Blue",
+  "lab": [
+   25.2126,
+   16.2083,
+   -31.3668
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   14.26,
+   10.57,
+   -20.61
+  ]
+ },
+ "pb15": {
+  "name": "Phthalo Blue (Green Shade)",
+  "lab": [
+   25.1072,
+   8.8397,
+   -19.7548
+  ],
+  "gamma": 1.4859,
+  "calibrated": true,
+  "opaqueLab": [
+   7.63,
+   17.48,
+   -29.67
+  ]
+ },
+ "pb15_rs": {
+  "name": "Phthalo Blue (Red Shade)",
+  "lab": [
+   23.9945,
+   4.9572,
+   -10.1374
+  ],
+  "gamma": 1.5109,
+  "calibrated": true,
+  "opaqueLab": [
+   3.29,
+   9.88,
+   -21.1
+  ]
+ },
+ "pb28": {
+  "name": "Cobalt Blue",
+  "lab": [
+   36.0876,
+   11.3618,
+   -48.5361
+  ],
+  "gamma": 0.8233,
+  "calibrated": true,
+  "opaqueLab": [
+   32.37,
+   14.71,
+   -57.05
+  ]
+ },
+ "pb36": {
+  "name": "Cerulean Blue Chromium",
+  "lab": [
+   41.7025,
+   -11.9904,
+   -32.609
+  ],
+  "gamma": 0.9765,
+  "calibrated": true,
+  "opaqueLab": [
+   37.45,
+   -13.14,
+   -38.43
+  ]
+ },
+ "pb36_deep": {
+  "name": "Cerulean Blue Deep",
+  "lab": [
+   37.6542,
+   -16.3351,
+   -22.7279
+  ],
+  "gamma": 1.2053,
+  "calibrated": true,
+  "opaqueLab": [
+   29.81,
+   -22.9,
+   -25.75
+  ]
+ },
+ "pb60": {
+  "name": "Anthraquinone Blue",
+  "lab": [
+   24.2254,
+   3.7173,
+   -5.25
+  ],
+  "gamma": 1.2576,
+  "calibrated": true,
+  "opaqueLab": [
+   6.32,
+   12.58,
+   -13.54
+  ]
+ },
+ "pb27": {
+  "name": "Prussian Blue Hue",
+  "lab": [
+   24.1217,
+   1.9194,
+   -3.0889
+  ],
+  "gamma": 1.7433,
+  "calibrated": true,
+  "opaqueLab": [
+   5.42,
+   2.54,
+   -7.4
+  ]
+ },
+ "pb_azurite": {
+  "name": "Azurite Hue",
+  "lab": [
+   31.3563,
+   -4.8022,
+   -15.6931
+  ],
+  "gamma": 2.1661,
+  "calibrated": true,
+  "opaqueLab": [
+   17.53,
+   -2.9,
+   -14.45
+  ]
+ },
+ "pb_mang": {
+  "name": "Manganese Blue Hue",
+  "lab": [
+   39.1152,
+   -15.1418,
+   -30.714
+  ],
+  "gamma": 1.7603,
+  "calibrated": true,
+  "opaqueLab": [
+   27.63,
+   -13.73,
+   -37.1
+  ]
+ },
+ "pb_turq": {
+  "name": "Turquoise",
+  "lab": [
+   25.2362,
+   -1.5798,
+   -6.2702
+  ],
+  "gamma": 1.6623,
+  "calibrated": true,
+  "opaqueLab": [
+   6.95,
+   -3.86,
+   -14.16
+  ]
+ },
+ "pg7": {
+  "name": "Phthalo Green (Blue Shade)",
+  "lab": [
+   26.6774,
+   -6.899,
+   -4.7101
+  ],
+  "gamma": 1.5808,
+  "calibrated": true,
+  "opaqueLab": [
+   9.88,
+   -17.31,
+   -7.16
+  ]
+ },
+ "pg36": {
+  "name": "Phthalo Green (Yellow Shade)",
+  "lab": [
+   27.7313,
+   -12.4119,
+   0.5875
+  ],
+  "gamma": 1.3704,
+  "calibrated": true,
+  "opaqueLab": [
+   11.37,
+   -27.87,
+   0.01
+  ]
+ },
+ "pg17": {
+  "name": "Chromium Oxide Green",
+  "lab": [
+   44.195,
+   -15.7775,
+   16.2045
+  ],
+  "gamma": 0.9514,
+  "calibrated": true,
+  "opaqueLab": [
+   40.67,
+   -19.64,
+   21.12
+  ]
+ },
+ "pg17_dk": {
+  "name": "Chromium Oxide Green Dark",
+  "lab": [
+   33.5702,
+   -9.3715,
+   8.6083
+  ],
+  "gamma": 0.9706,
+  "calibrated": true,
+  "opaqueLab": [
+   26.61,
+   -14.51,
+   14.21
+  ]
+ },
+ "pg50": {
+  "name": "Cobalt Green",
+  "lab": [
+   35.043,
+   -18.2568,
+   3.2579
+  ],
+  "gamma": 1.15,
+  "calibrated": true,
+  "opaqueLab": [
+   25.94,
+   -28.58,
+   4.79
+  ]
+ },
+ "pg50_teal": {
+  "name": "Cobalt Teal",
+  "lab": [
+   63.8006,
+   -41.4205,
+   -9.5447
+  ],
+  "gamma": 1.3025,
+  "calibrated": true,
+  "opaqueLab": [
+   57.44,
+   -41.87,
+   -11.71
+  ]
+ },
+ "pg50_titan": {
+  "name": "Cobalt Titanate Green",
+  "lab": [
+   59.7889,
+   -33.5042,
+   24.5333
+  ],
+  "gamma": 1.0,
+  "calibrated": false
+ },
+ "pg50_turq": {
+  "name": "Cobalt Turquoise",
+  "lab": [
+   42.616,
+   -28.9113,
+   -9.4468
+  ],
+  "gamma": 0.8963,
+  "calibrated": true,
+  "opaqueLab": [
+   39.28,
+   -37.72,
+   -11.78
+  ]
+ },
+ "pg7_lt": {
+  "name": "Permanent Green Light",
+  "lab": [
+   45.6531,
+   -50.6616,
+   20.9782
+  ],
+  "gamma": 1.0,
+  "calibrated": false,
+  "opaqueLab": [
+   38.83,
+   -64.12,
+   0.33
+  ]
+ },
+ "pg18": {
+  "name": "Viridian Green Hue",
+  "lab": [
+   35.2061,
+   -23.2261,
+   -0.0673
+  ],
+  "gamma": 1.1039,
+  "calibrated": true,
+  "opaqueLab": [
+   27.74,
+   -33.2,
+   0.67
+  ]
+ },
+ "pg_sap": {
+  "name": "Sap Green Hue",
+  "lab": [
+   27.5703,
+   -3.0917,
+   3.1402
+  ],
+  "gamma": 1.5366,
+  "calibrated": true,
+  "opaqueLab": [
+   12.85,
+   -7.1,
+   5.11
+  ]
+ },
+ "pg_hook": {
+  "name": "Hookers Green Hue",
+  "lab": [
+   26.5007,
+   -2.1112,
+   -0.0037
+  ],
+  "gamma": 1.6664,
+  "calibrated": true,
+  "opaqueLab": [
+   10.45,
+   -5.88,
+   -0.44
+  ]
+ },
+ "pg_jenk": {
+  "name": "Jenkins Green",
+  "lab": [
+   25.7612,
+   -3.6221,
+   0.1597
+  ],
+  "gamma": 1.2482,
+  "calibrated": true,
+  "opaqueLab": [
+   11.87,
+   -7.32,
+   -0.49
+  ]
+ },
+ "pg_terre": {
+  "name": "Terre Verte Hue",
+  "lab": [
+   35.5669,
+   -6.5735,
+   8.1753
+  ],
+  "gamma": 1.1262,
+  "calibrated": true,
+  "opaqueLab": [
+   28.61,
+   -7.13,
+   7.7
+  ]
+ }
+}

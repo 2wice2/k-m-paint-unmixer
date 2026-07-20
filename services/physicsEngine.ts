@@ -1,344 +1,622 @@
-import { Pigment, UnmixResult, RecipeComponent, SpectralPoint } from "../types";
-import { PHYSICAL_PIGMENT_DATA, WAVELENGTHS } from "../constants";
-import { labToRgb, rgbToHex, rgbToLab } from "../utils/colorUtils";
+import { MixModel, Pigment, RecipeComponent, SpectralPoint, UnmixResult } from '../types';
+import { CALIBRATION, SCATTERING_S, SPECTRAL_R_DATA, WAVELENGTHS } from '../constants';
+import {
+  A_10,
+  D65_10,
+  N_BANDS,
+  deltaE2000,
+  labToRgb,
+  labToXYZ,
+  reflectanceToLab,
+  rgbToLab,
+} from './colorimetry';
+import { LabColor } from '../types';
 
-// --- Math Helpers & Optimization Tables ---
+// ---------------------------------------------------------------------------
+// Optical model
+//
+// Measured reflectance (over-white drawdowns) → Saunderson-corrected internal
+// reflectance → K/S via Kubelka–Munk → mix → invert → re-apply Saunderson.
+//
+// Ingest k1 = 0.03 sits just below the dataset's minimum measured reflectance
+// (0.0372, gloss included) so every masstone survives the inverse correction.
+// The OUTPUT side depends on the mixing model: the calibrated default renders
+// paint at complete hiding viewed without glare (specular EXCLUDED, k1 = 0 —
+// the convention of Golden's 6 mm fully-opaque CIELAB data it is calibrated
+// against); the thin-film comparison models re-apply the full correction so
+// they land back on the drawdown measurement.
+// ---------------------------------------------------------------------------
 
-// CIE 1931 2-degree Observer colour-matching functions, pre-weighted by the
-// D65 illuminant SPD at 400–700 nm / 20 nm. Weighting the CMFs by the
-// illuminant is required so that a perfectly reflective sample (R=1) maps to
-// the D65 reference white used in the XYZ→Lab step.
-const CIE_CMF_RAW = [
-  { x: 0.014, y: 0.000, z: 0.067 }, { x: 0.134, y: 0.004, z: 0.645 }, { x: 0.348, y: 0.023, z: 1.747 },
-  { x: 0.290, y: 0.060, z: 1.669 }, { x: 0.095, y: 0.139, z: 0.812 }, { x: 0.004, y: 0.323, z: 0.272 },
-  { x: 0.063, y: 0.710, z: 0.078 }, { x: 0.290, y: 0.954, z: 0.020 }, { x: 0.594, y: 0.995, z: 0.003 },
-  { x: 0.916, y: 0.870, z: 0.001 }, { x: 1.062, y: 0.631, z: 0.000 }, { x: 0.854, y: 0.381, z: 0.000 },
-  { x: 0.447, y: 0.175, z: 0.000 }, { x: 0.164, y: 0.061, z: 0.000 }, { x: 0.046, y: 0.017, z: 0.000 },
-  { x: 0.011, y: 0.004, z: 0.000 },
-];
+export const SAUNDERSON_K1 = 0.03;
+export const SAUNDERSON_K2 = 0.6;
 
-const D65_SPD = [
-  82.75, 93.43, 104.86, 117.81, 115.92, 109.35, 104.79, 104.41,
-  100.00, 95.79, 90.01, 87.70, 83.70, 80.21, 78.28, 71.61,
-];
+const R_INT_MIN = 1e-5;
+const R_INT_MAX = 0.99999;
 
-const CIE_CMF_DATA = CIE_CMF_RAW.map((cmf, i) => ({
-  x: cmf.x * D65_SPD[i],
-  y: cmf.y * D65_SPD[i],
-  z: cmf.z * D65_SPD[i],
-}));
-
-const SUM_Y_WEIGHTS = CIE_CMF_DATA.reduce((sum, cmf) => sum + cmf.y, 0);
-const NORMALIZATION_K = 100 / (SUM_Y_WEIGHTS || 1);
-
-const ksToReflectance = (KS: number): number => {
-  if (KS > 500) return 0; // Avoid NaN
-  return 1 + KS - Math.sqrt(Math.pow(KS, 2) + (2 * KS));
+const measuredToInternal = (rm: number): number => {
+  const r = (rm - SAUNDERSON_K1) / (1 - SAUNDERSON_K1 - SAUNDERSON_K2 * (1 - rm));
+  return Math.min(R_INT_MAX, Math.max(R_INT_MIN, r));
 };
 
-// Single-constant Kubelka–Munk mixing: (K/S)_mix = Σ c_i · (K/S)_i.
-// Valid because all pigments were measured as 10-mil drawdowns over the same
-// white substrate, so each K/S already embeds that pigment's own scattering.
-const calculateMixKS = (amounts: number[], pigmentKS: number[][]): number[] => {
-  const mixKS: number[] = new Array(pigmentKS[0].length).fill(0);
-  for (let w = 0; w < mixKS.length; w++) {
-    let sum = 0;
-    for (let i = 0; i < amounts.length; i++) {
-      sum += amounts[i] * pigmentKS[i][w];
+/** Saunderson forward, specular included — thin-film (drawdown) convention. */
+const internalToMeasured = (r: number): number =>
+  SAUNDERSON_K1 +
+  ((1 - SAUNDERSON_K1) * (1 - SAUNDERSON_K2) * r) / (1 - SAUNDERSON_K2 * r);
+
+/** Saunderson forward, specular EXCLUDED (k1 = 0) — fully-opaque convention. */
+const internalToSpex = (r: number): number =>
+  ((1 - SAUNDERSON_K2) * r) / (1 - SAUNDERSON_K2 * r);
+
+const ksFromR = (r: number): number => ((1 - r) * (1 - r)) / (2 * r);
+
+const rFromKS = (ks: number): number => 1 + ks - Math.sqrt(ks * ks + 2 * ks);
+
+interface PreparedPigment {
+  id: string;
+  name: string;
+  hex: string;
+  s: number;            // opacity-class scattering weight (km2c mode)
+  g: number;            // fully-opaque calibration γ (kmcal mode)
+  sCal: number;         // calibrated relative scattering (kmcal mode; TiW = 1)
+  ksInt: Float64Array;  // internal K/S per band
+  lnR: Float64Array;    // ln(measured R) per band, for WGM mixing
+}
+
+const preparePalette = (palette: Pigment[]): PreparedPigment[] => {
+  const out: PreparedPigment[] = [];
+  for (const p of palette) {
+    const rMeas = SPECTRAL_R_DATA[p.id];
+    if (!rMeas) continue;
+    const ksInt = new Float64Array(N_BANDS);
+    const lnR = new Float64Array(N_BANDS);
+    for (let w = 0; w < N_BANDS; w++) {
+      ksInt[w] = ksFromR(measuredToInternal(rMeas[w]));
+      lnR[w] = Math.log(Math.max(1e-4, rMeas[w]));
     }
-    mixKS[w] = sum;
+    const cal = CALIBRATION[p.id];
+    out.push({
+      id: p.id,
+      name: p.name,
+      hex: p.hex,
+      s: SCATTERING_S[p.id] ?? 0.45,
+      g: cal?.g ?? 1,
+      sCal: cal?.s ?? 1,
+      ksInt,
+      lnR,
+    });
   }
-  return mixKS;
+  return out;
 };
 
-const CAP_THRESHOLD = 1e-4;
+// ---------------------------------------------------------------------------
+// Mixture evaluation (allocation-free hot path)
+// ---------------------------------------------------------------------------
 
-// Project a composition onto the feasible set "at most `cap` non-zero
-// pigments": repeatedly drop the smallest non-zero entry, then renormalize
-// so amounts still sum to 1.
-const enforceCap = (amounts: number[], cap: number): number[] => {
-  const result = [...amounts];
-  let nonZero = result.reduce((n, a) => n + (a > CAP_THRESHOLD ? 1 : 0), 0);
-  while (nonZero > cap) {
-    let minIdx = -1;
-    let minVal = Infinity;
-    for (let i = 0; i < result.length; i++) {
-      if (result[i] > CAP_THRESHOLD && result[i] < minVal) {
-        minVal = result[i];
-        minIdx = i;
+class Evaluator {
+  readonly pigs: PreparedPigment[];
+  readonly model: MixModel;
+  readonly targetLab: LabColor;
+  readonly refl = new Float64Array(N_BANDS); // last predicted measured R
+  private readonly lab: LabColor = { l: 0, a: 0, b: 0 };
+  evalCount = 0;
+
+  constructor(pigs: PreparedPigment[], model: MixModel, targetLab: LabColor) {
+    this.pigs = pigs;
+    this.model = model;
+    this.targetLab = targetLab;
+  }
+
+  /** Predict display-domain reflectance into this.refl. */
+  mix(indices: readonly number[], weights: ArrayLike<number>): Float64Array {
+    const m = indices.length;
+    const refl = this.refl;
+    if (this.model === 'wgm') {
+      for (let w = 0; w < N_BANDS; w++) {
+        let lnR = 0;
+        for (let j = 0; j < m; j++) lnR += weights[j] * this.pigs[indices[j]].lnR[w];
+        refl[w] = Math.exp(lnR);
+      }
+      return refl;
+    }
+    // Kubelka–Munk two-constant form: (K/S)mix = Σ cᵢkᵢ / Σ cᵢsᵢ.
+    //   'kmcal': kᵢ = γᵢ·sᵢ·(K/S)ᵢ with calibrated γ and s (s=1 convention,
+    //            zinc ≈ 0.42); fully-opaque output, specular excluded.
+    //   'km2c':  kᵢ = sᵢ·(K/S)ᵢ with opacity-class s; thin-film output.
+    //   'km1c':  single-constant (all s = 1); thin-film output.
+    const model = this.model;
+    let sumS = 0;
+    for (let j = 0; j < m; j++) {
+      const p = this.pigs[indices[j]];
+      const s = model === 'kmcal' ? p.sCal : model === 'km2c' ? p.s : 1;
+      sumS += weights[j] * s;
+    }
+    if (sumS <= 0) sumS = 1;
+    for (let w = 0; w < N_BANDS; w++) {
+      let k = 0;
+      for (let j = 0; j < m; j++) {
+        const p = this.pigs[indices[j]];
+        const ks =
+          model === 'kmcal' ? p.g * p.sCal * p.ksInt[w]
+          : model === 'km2c' ? p.s * p.ksInt[w]
+          : p.ksInt[w];
+        k += weights[j] * ks;
+      }
+      const rInt = rFromKS(k / sumS);
+      refl[w] = model === 'kmcal' ? internalToSpex(rInt) : internalToMeasured(rInt);
+    }
+    return refl;
+  }
+
+  labOfLastMix(): LabColor {
+    let X = 0, Y = 0, Z = 0;
+    const { wx, wy, wz, white } = D65_10;
+    for (let w = 0; w < N_BANDS; w++) {
+      const r = this.refl[w];
+      X += r * wx[w];
+      Y += r * wy[w];
+      Z += r * wz[w];
+    }
+    const fx = fLabFast(X / white[0]);
+    const fy = fLabFast(Y / white[1]);
+    const fz = fLabFast(Z / white[2]);
+    this.lab.l = 116 * fy - 16;
+    this.lab.a = 500 * (fx - fy);
+    this.lab.b = 200 * (fy - fz);
+    return this.lab;
+  }
+
+  deltaE(indices: readonly number[], weights: ArrayLike<number>): number {
+    this.evalCount++;
+    this.mix(indices, weights);
+    return deltaE2000(this.labOfLastMix(), this.targetLab);
+  }
+}
+
+const LAB_EPS = 216 / 24389;
+const LAB_KAPPA = 24389 / 27;
+const fLabFast = (t: number): number =>
+  t > LAB_EPS ? Math.cbrt(t) : (LAB_KAPPA * t + 16) / 116;
+
+// ---------------------------------------------------------------------------
+// Deterministic Nelder–Mead over the simplex (softmax parameterisation).
+// weights = softmax([theta_0..theta_{m-2}, 0]) keeps amounts positive and
+// summing to 1 with an unconstrained search space; no randomness anywhere,
+// so the same target always yields the same recipe.
+// ---------------------------------------------------------------------------
+
+const softmax = (theta: ArrayLike<number>, out: Float64Array): void => {
+  const n = theta.length; // out has length n+1
+  let max = 0;
+  for (let i = 0; i < n; i++) if (theta[i] > max) max = theta[i];
+  let sum = Math.exp(-max); // implicit last logit = 0
+  for (let i = 0; i < n; i++) {
+    out[i] = Math.exp(theta[i] - max);
+    sum += out[i];
+  }
+  for (let i = 0; i < n; i++) out[i] /= sum;
+  out[n] = Math.exp(-max) / sum;
+};
+
+interface SubsetResult {
+  indices: number[];
+  theta: number[];
+  weights: number[];
+  de: number;
+}
+
+const optimizeSubset = (
+  ev: Evaluator,
+  indices: number[],
+  theta0: number[],
+  step: number,
+  maxEval: number,
+): SubsetResult => {
+  const m = indices.length;
+  const wBuf = new Float64Array(m);
+
+  if (m === 1) {
+    wBuf[0] = 1;
+    const de = ev.deltaE(indices, wBuf);
+    return { indices, theta: [], weights: [1], de };
+  }
+
+  const n = m - 1;
+  const f = (theta: ArrayLike<number>): number => {
+    softmax(theta, wBuf);
+    return ev.deltaE(indices, wBuf);
+  };
+
+  // Initial simplex around theta0
+  const pts: number[][] = [theta0.slice()];
+  for (let j = 0; j < n; j++) {
+    const p = theta0.slice();
+    p[j] += step;
+    pts.push(p);
+  }
+  const fv = pts.map(f);
+  let evals = n + 1;
+
+  const ALPHA = 1, GAMMA = 2, RHO = 0.5, SIGMA = 0.5;
+
+  while (evals < maxEval) {
+    // Order vertices (insertion sort — tiny n)
+    for (let i = 1; i <= n; i++) {
+      const pv = pts[i], pf = fv[i];
+      let j = i - 1;
+      while (j >= 0 && fv[j] > pf) {
+        pts[j + 1] = pts[j];
+        fv[j + 1] = fv[j];
+        j--;
+      }
+      pts[j + 1] = pv;
+      fv[j + 1] = pf;
+    }
+    if (fv[n] - fv[0] < 1e-4) break;
+
+    // Centroid of all but worst
+    const cen = new Array(n).fill(0);
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++) cen[j] += pts[i][j] / n;
+
+    const worst = pts[n];
+    const refl = cen.map((c, j) => c + ALPHA * (c - worst[j]));
+    const fr = f(refl); evals++;
+
+    if (fr < fv[0]) {
+      const exp = cen.map((c, j) => c + GAMMA * (c - worst[j]));
+      const fe = f(exp); evals++;
+      if (fe < fr) { pts[n] = exp; fv[n] = fe; }
+      else { pts[n] = refl; fv[n] = fr; }
+    } else if (fr < fv[n - 1]) {
+      pts[n] = refl; fv[n] = fr;
+    } else {
+      const useOutside = fr < fv[n];
+      const base = useOutside ? refl : worst;
+      const con = cen.map((c, j) => c + RHO * (base[j] - c));
+      const fc = f(con); evals++;
+      if (fc < Math.min(fr, fv[n])) {
+        pts[n] = con; fv[n] = fc;
+      } else {
+        for (let i = 1; i <= n; i++) {
+          pts[i] = pts[i].map((v, j) => pts[0][j] + SIGMA * (v - pts[0][j]));
+          fv[i] = f(pts[i]); evals++;
+        }
       }
     }
-    if (minIdx === -1) break;
-    result[minIdx] = 0;
-    nonZero--;
-  }
-  const sum = result.reduce((a, b) => a + b, 0);
-  if (sum > 0) for (let i = 0; i < result.length; i++) result[i] /= sum;
-  return result;
-};
-
-// Optimized RGB to Spectral approximation
-// Uses a "Long Pass" simulation for Red to better match real pigment physics
-const rgbToSpectralApprox = (r: number, g: number, b: number): number[] => {
-  const R = r / 255;
-  const G = g / 255;
-  const B = b / 255;
-
-  return WAVELENGTHS.map(wl => {
-    // Blue: Gaussian centered ~455nm
-    const bContrib = B * Math.exp(-Math.pow(wl - 455, 2) / 2000); 
-    
-    // Green: Gaussian centered ~540nm
-    const gContrib = G * Math.exp(-Math.pow(wl - 540, 2) / 2000); 
-    
-    // Red: Sigmoidal / Long-pass behavior
-    // Real red pigments don't drop off at 700nm. They stay high.
-    // We simulate this with a logistic function centered at 600nm.
-    // However, we also need to support "Purple" (Red + Blue).
-    // So we combine a Gaussian (for mixed reds) with a floor for pure red?
-    // Let's stick to a wider Gaussian that is shifted right, but ensure it doesn't drop too fast.
-    
-    // Improved Red: Centered at 620, but wide.
-    // Using a "Flat Top" gaussian for Red if wl > 600
-    let rContrib = 0;
-    if (wl < 600) {
-       rContrib = R * Math.exp(-Math.pow(wl - 600, 2) / 1500);
-    } else {
-       // Plateau from 600 to 700 for red
-       rContrib = R * Math.exp(-Math.pow(wl - 600, 2) / 10000); // Very slow decay
-    }
-    
-    let ref = 0.01 + (bContrib + gContrib + rContrib) * 0.98;
-    return Math.min(0.99, Math.max(0.01, ref));
-  });
-};
-
-const spectralToLab = (reflectance: number[]): { l: number, a: number, b: number } => {
-  let X = 0, Y = 0, Z = 0;
-  
-  for (let i = 0; i < reflectance.length; i++) {
-    const r = reflectance[i];
-    const cmf = CIE_CMF_DATA[i];
-    X += r * cmf.x;
-    Y += r * cmf.y;
-    Z += r * cmf.z;
   }
 
-  X = X * NORMALIZATION_K;
-  Y = Y * NORMALIZATION_K;
-  Z = Z * NORMALIZATION_K;
-
-  const Xn = 95.047, Yn = 100.0, Zn = 108.883;
-  const f = (t: number) => t > 0.008856 ? Math.pow(t, 1/3) : (7.787 * t) + 16/116;
-  
-  const L = 116 * f(Y / Yn) - 16;
-  const a = 500 * (f(X / Xn) - f(Y / Yn));
-  const b = 200 * (f(Y / Yn) - f(Z / Zn));
-  
-  return { l: L, a, b };
+  let bi = 0;
+  for (let i = 1; i <= n; i++) if (fv[i] < fv[bi]) bi = i;
+  softmax(pts[bi], wBuf);
+  return { indices, theta: pts[bi].slice(), weights: Array.from(wBuf), de: fv[bi] };
 };
 
-const calculateDeltaE = (lab1: { l: number, a: number, b: number }, lab2: { l: number, a: number, b: number }) => {
-  return Math.sqrt(
-    Math.pow(lab1.l - lab2.l, 2) +
-    Math.pow(lab1.a - lab2.a, 2) +
-    Math.pow(lab1.b - lab2.b, 2)
+/** Equal-weights start, plus a white-heavy start when a white is present. */
+const initialThetas = (
+  pigs: PreparedPigment[],
+  indices: number[],
+): number[][] => {
+  const m = indices.length;
+  const inits: number[][] = [new Array(Math.max(0, m - 1)).fill(0)];
+  const whitePos = indices.findIndex(
+    i => pigs[i].id === 'pw6' || pigs[i].id === 'pw4',
   );
+  if (whitePos !== -1 && m >= 2) {
+    const t = new Array(m - 1).fill(0);
+    if (whitePos < m - 1) t[whitePos] = 2.2;
+    else for (let j = 0; j < m - 1; j++) t[j] = -2.2;
+    inits.push(t);
+  }
+  return inits;
 };
 
-// --- Main Solver ---
+// ---------------------------------------------------------------------------
+// "Smoothest metamer" target spectrum for the chart: the smoothest physical
+// reflectance (min Σ‖second differences‖²) whose D65/10° colour equals the
+// target. Solved as a 31×31 linear system, then clipped to plausible paint
+// reflectance [0.01, 0.99] with an XYZ-residual correction pass.
+// ---------------------------------------------------------------------------
+
+const solveLinear = (A: Float64Array[], b: Float64Array): Float64Array => {
+  const n = b.length;
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    for (let r = col + 1; r < n; r++)
+      if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+    if (piv !== col) {
+      const tA = A[col]; A[col] = A[piv]; A[piv] = tA;
+      const tb = b[col]; b[col] = b[piv]; b[piv] = tb;
+    }
+    const d = A[col][col] || 1e-12;
+    for (let r = col + 1; r < n; r++) {
+      const factor = A[r][col] / d;
+      if (factor === 0) continue;
+      for (let c = col; c < n; c++) A[r][c] -= factor * A[col][c];
+      b[r] -= factor * b[col];
+    }
+  }
+  const x = new Float64Array(n);
+  for (let r = n - 1; r >= 0; r--) {
+    let acc = b[r];
+    for (let c = r + 1; c < n; c++) acc -= A[r][c] * x[c];
+    x[r] = acc / (A[r][r] || 1e-12);
+  }
+  return x;
+};
+
+export const smoothestMetamer = (targetLab: LabColor): number[] => {
+  const xyz = labToXYZ(targetLab);
+  const T = [D65_10.wx, D65_10.wy, D65_10.wz].map(w =>
+    Float64Array.from(w, v => v / 100),
+  );
+  const W = 3e4;
+
+  // Base matrix M = D2ᵀD2 + W·TᵀT (D2 = second-difference operator)
+  const M0: Float64Array[] = Array.from(
+    { length: N_BANDS },
+    () => new Float64Array(N_BANDS),
+  );
+  for (let k = 0; k < N_BANDS - 2; k++) {
+    const idx = [k, k + 1, k + 2];
+    const coef = [1, -2, 1];
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 3; j++) M0[idx[i]][idx[j]] += coef[i] * coef[j];
+  }
+  for (let i = 0; i < N_BANDS; i++)
+    for (let j = 0; j < N_BANDS; j++)
+      for (let ch = 0; ch < 3; ch++) M0[i][j] += W * T[ch][i] * T[ch][j];
+
+  const target = [xyz[0] / 100, xyz[1] / 100, xyz[2] / 100];
+  let b = target.slice();
+  let best: Float64Array | null = null;
+
+  for (let pass = 0; pass < 3; pass++) {
+    const A = M0.map(row => Float64Array.from(row));
+    const rhs = new Float64Array(N_BANDS);
+    for (let i = 0; i < N_BANDS; i++)
+      for (let ch = 0; ch < 3; ch++) rhs[i] += W * T[ch][i] * b[ch];
+    const R = solveLinear(A, rhs);
+    for (let i = 0; i < N_BANDS; i++) R[i] = Math.min(0.99, Math.max(0.01, R[i]));
+    best = R;
+    // Compensate clipping: nudge the linear target by the achieved residual
+    const achieved = [0, 0, 0];
+    for (let ch = 0; ch < 3; ch++)
+      for (let i = 0; i < N_BANDS; i++) achieved[ch] += T[ch][i] * R[i];
+    const err = Math.hypot(
+      achieved[0] - target[0], achieved[1] - target[1], achieved[2] - target[2],
+    );
+    if (err < 1e-4) break;
+    b = b.map((v, ch) => v + (target[ch] - achieved[ch]));
+  }
+  return Array.from(best!);
+};
+
+// ---------------------------------------------------------------------------
+// Main solver
+// ---------------------------------------------------------------------------
+
+const MAX_RECIPE_PIGMENTS = 6;   // enumeration-cost bound
+const POOL_SIZE = 15;            // candidate pigments considered per solve
+const MIN_COMPONENT = 0.0075;    // recipe components below 0.75% are removed
+const COMPLEXITY_PENALTY = 0.05; // ΔE00 handicap per extra paint
+
+const MODEL_LABELS: Record<MixModel, string> = {
+  kmcal: 'γ-calibrated Kubelka–Munk (fully-opaque endpoints vs Golden 6mm CIELAB, specular excluded)',
+  km2c: 'Kubelka–Munk, scattering-weighted (pseudo two-constant, thin-film)',
+  km1c: 'Kubelka–Munk, single-constant (thin-film)',
+  wgm: 'weighted geometric mean (Burns, thin-film)',
+};
 
 export const solvePhysicsRecipe = async (
   targetHex: string,
   palette: Pigment[],
-  maxPigments?: number
+  maxPigments?: number,
+  model: MixModel = 'kmcal',
 ): Promise<UnmixResult> => {
-  // 1. Reconstruct Target Spectrum
   const rgb = {
     r: parseInt(targetHex.slice(1, 3), 16),
     g: parseInt(targetHex.slice(3, 5), 16),
-    b: parseInt(targetHex.slice(5, 7), 16)
+    b: parseInt(targetHex.slice(5, 7), 16),
   };
-  // Target spectrum is kept only for the reference line on the chart; the
-  // solver optimizes against the target's true sRGB→Lab value directly.
-  const targetSpectral = rgbToSpectralApprox(rgb.r, rgb.g, rgb.b);
   const targetLab = rgbToLab(rgb.r, rgb.g, rgb.b);
 
-  // 2. Prepare Palette Data
-  const activeKS: number[][] = [];
-  const activeIds: string[] = [];
-  const activePigments: Pigment[] = [];
-  
-  palette.forEach(p => {
-    if (PHYSICAL_PIGMENT_DATA[p.id]) {
-      activeKS.push(PHYSICAL_PIGMENT_DATA[p.id]);
-      activeIds.push(p.id);
-      activePigments.push(p);
+  const pigs = preparePalette(palette);
+  if (pigs.length === 0) throw new Error('No spectral data for selected pigments.');
+
+  const cap = Math.max(
+    1,
+    Math.min(maxPigments ?? MAX_RECIPE_PIGMENTS, MAX_RECIPE_PIGMENTS, pigs.length),
+  );
+
+  const ev = new Evaluator(pigs, model, targetLab);
+  const wBuf = new Float64Array(2);
+
+  // --- Candidate pool: solo + tint relevance --------------------------------
+  const whiteIdx = (() => {
+    let idx = pigs.findIndex(p => p.id === 'pw6');
+    if (idx === -1) idx = pigs.findIndex(p => p.id === 'pw4');
+    return idx;
+  })();
+
+  const score = new Float64Array(pigs.length);
+  for (let i = 0; i < pigs.length; i++) {
+    wBuf[0] = 1;
+    let s = ev.deltaE([i], wBuf);
+    if (whiteIdx !== -1 && i !== whiteIdx) {
+      for (const t of [0.15, 0.35, 0.55, 0.75, 0.9]) {
+        wBuf[0] = 1 - t;
+        wBuf[1] = t;
+        const de = ev.deltaE([i, whiteIdx], wBuf);
+        if (de < s) s = de;
+      }
     }
-  });
+    score[i] = s;
+  }
 
-  if (activeKS.length === 0) throw new Error("No physical data for selected pigments.");
+  const byScore = pigs
+    .map((p, i) => i)
+    .sort((a, b) => score[a] - score[b] || (pigs[a].id < pigs[b].id ? -1 : 1));
 
-  const cap = Math.max(1, Math.min(maxPigments ?? activeIds.length, activeIds.length));
-
-  // 3. SMART INITIALIZATION (The Fix)
-  // Instead of guessing 50% white, let's find the best starting point.
-  // We check 100% of each pigment, and (if White exists) 50/50 tints.
-  
-  let bestAmounts = new Array(activeIds.length).fill(0);
-  let bestError = 99999;
-  
-  const whiteIdx = activeIds.findIndex(id => id === 'pw6' || id === 'pw4');
-
-  // Helper to test a composition
-  const evaluate = (amounts: number[]) => {
-    const mixKS = calculateMixKS(amounts, activeKS);
-    const mixR = mixKS.map(ks => ksToReflectance(ks));
-    const mixLab = spectralToLab(mixR);
-    return calculateDeltaE(targetLab, mixLab);
+  const pool: number[] = [];
+  const pushUnique = (i: number) => {
+    if (i >= 0 && !pool.includes(i) && pool.length < POOL_SIZE) pool.push(i);
   };
+  for (const id of ['pw6', 'pw4']) pushUnique(pigs.findIndex(p => p.id === id));
+  const blacks = ['pbk7', 'pbk9', 'pbk11']
+    .map(id => pigs.findIndex(p => p.id === id))
+    .filter(i => i !== -1)
+    .sort((a, b) => score[a] - score[b]);
+  if (blacks.length > 0) pushUnique(blacks[0]);
+  for (const i of byScore) pushUnique(i);
 
-  // Test 1: Pure Pigments
-  for (let i = 0; i < activeIds.length; i++) {
-    const amounts = new Array(activeIds.length).fill(0);
-    amounts[i] = 1;
-    const err = evaluate(amounts);
-    if (err < bestError) {
-      bestError = err;
-      bestAmounts = [...amounts];
-    }
-  }
+  // --- Coarse pass over every subset of the pool (sizes 1..cap) -------------
+  const coarse: SubsetResult[] = [];
+  const combo: number[] = [];
+  let sinceYield = 0;
 
-  // Test 2: 50/50 with White (if exists) — needs cap >= 2
-  if (whiteIdx !== -1 && cap >= 2) {
-    for (let i = 0; i < activeIds.length; i++) {
-      if (i === whiteIdx) continue;
-      const amounts = new Array(activeIds.length).fill(0);
-      amounts[whiteIdx] = 0.5;
-      amounts[i] = 0.5;
-      const err = evaluate(amounts);
-      if (err < bestError) {
-        bestError = err;
-        bestAmounts = [...amounts];
+  const runCoarse = async (size: number, start: number): Promise<void> => {
+    if (combo.length === size) {
+      const indices = combo.map(c => pool[c]);
+      let best: SubsetResult | null = null;
+      for (const t0 of initialThetas(pigs, indices)) {
+        const r = optimizeSubset(ev, indices, t0, 1.2, 40 + 18 * size);
+        if (!best || r.de < best.de) best = r;
       }
-    }
-  }
-
-  // Test 3: Equal Mix (Fallback) — capped to the max pigment count
-  const equalRaw = new Array(activeIds.length).fill(1 / activeIds.length);
-  const equalAmounts = enforceCap(equalRaw, cap);
-  const equalErr = evaluate(equalAmounts);
-  if (equalErr < bestError) {
-    bestError = equalErr;
-    bestAmounts = equalAmounts;
-  }
-
-  // 4. Optimization (Hill Climbing with Momentum-ish behavior)
-  let bestLab = { l: 0, a: 0, b: 0 };
-  const ITERATIONS = 3000;
-  const YIELD_INTERVAL = 300;
-  
-  // We run the loop starting from our "Smart Best"
-  let currentAmounts = [...bestAmounts];
-  
-  for (let i = 0; i < ITERATIONS; i++) {
-    if (i % YIELD_INTERVAL === 0) await new Promise(resolve => setTimeout(resolve, 0));
-
-    // Adaptive Mutation
-    const progress = i / ITERATIONS;
-    // Decay mutation size over time
-    const stepSize = Math.max(0.002, 0.15 * (1 - progress));
-
-    const candidateAmounts = [...currentAmounts];
-
-    // When the cap is tight, occasional swap mutations let the search replace
-    // an in-use pigment with an unused one (plain perturbation can't, because
-    // enforceCap would drop the new pigment back to zero).
-    const useSwap = cap < activeIds.length && Math.random() < 0.15;
-    if (useSwap) {
-      const active: number[] = [];
-      const inactive: number[] = [];
-      for (let k = 0; k < candidateAmounts.length; k++) {
-        if (candidateAmounts[k] > CAP_THRESHOLD) active.push(k);
-        else inactive.push(k);
+      coarse.push(best!);
+      if (++sinceYield >= 500) {
+        sinceYield = 0;
+        await new Promise(res => setTimeout(res, 0));
       }
-      if (active.length > 0 && inactive.length > 0) {
-        const outIdx = active[Math.floor(Math.random() * active.length)];
-        const inIdx = inactive[Math.floor(Math.random() * inactive.length)];
-        candidateAmounts[inIdx] = candidateAmounts[outIdx];
-        candidateAmounts[outIdx] = 0;
-      }
-    } else {
-      const mutationIdx = Math.floor(Math.random() * activeIds.length);
-      const mutationAmount = (Math.random() - 0.5) * stepSize;
-      candidateAmounts[mutationIdx] = Math.max(0, candidateAmounts[mutationIdx] + mutationAmount);
+      return;
     }
-
-    // Normalize
-    const sum = candidateAmounts.reduce((a, b) => a + b, 0);
-    if (sum === 0) continue;
-    for(let k=0; k<candidateAmounts.length; k++) candidateAmounts[k] /= sum;
-
-    // Enforce paint count cap
-    const capped = cap < activeIds.length ? enforceCap(candidateAmounts, cap) : candidateAmounts;
-    for (let k = 0; k < candidateAmounts.length; k++) candidateAmounts[k] = capped[k];
-
-    // Evaluate
-    const ks = calculateMixKS(candidateAmounts, activeKS);
-    const rVals = ks.map(k => ksToReflectance(k));
-    const lab = spectralToLab(rVals);
-    const error = calculateDeltaE(targetLab, lab);
-
-    // Greedy Step (Accept if better)
-    // Optional: Add simulated annealing probability here if needed, but for simple unmixing greedy is usually fine if initialization is good.
-    if (error < bestError) {
-      bestError = error;
-      bestAmounts = candidateAmounts;
-      bestLab = lab;
-      currentAmounts = candidateAmounts; // Move to new state
-    } else {
-        // Occasional random jump to escape local minima if stuck for too long? 
-        // Not implemented to keep it fast, relying on Smart Init.
+    for (let c = start; c <= pool.length - (size - combo.length); c++) {
+      combo.push(c);
+      await runCoarse(size, c + 1);
+      combo.pop();
     }
+  };
+  for (let size = 1; size <= Math.min(cap, pool.length); size++) {
+    await runCoarse(size, 0);
   }
 
-  // 5. Finalize Results
-  const recipe: RecipeComponent[] = bestAmounts.map((amt, idx) => {
-    const p = activePigments[idx];
-    return {
-      pigmentId: activeIds[idx],
-      pigmentName: p?.name || 'Unknown',
-      percentage: amt * 100,
-      hex: p?.hex || '#000'
-    };
-  })
-  .filter(r => r.percentage > 0.5)
-  .sort((a, b) => b.percentage - a.percentage);
+  // --- Refine the most promising subsets ------------------------------------
+  const penalized = (r: SubsetResult): number =>
+    r.de + COMPLEXITY_PENALTY * (r.indices.length - 1);
+  coarse.sort((a, b) => penalized(a) - penalized(b));
 
-  const finalKS = calculateMixKS(bestAmounts, activeKS);
-  const finalR = finalKS.map(ks => ksToReflectance(ks));
-  
+  // Refine the global top plus the best subset of every size — simple recipes
+  // must always get a full-precision shot, or a coarse near-tie can bury a
+  // 2-paint solution under metameric many-paint alternatives.
+  const refineSet = coarse.slice(0, 32);
+  for (let size = 1; size <= cap; size++) {
+    const bestOfSize = coarse.find(r => r.indices.length === size);
+    if (bestOfSize && !refineSet.includes(bestOfSize)) refineSet.push(bestOfSize);
+  }
+
+  let best: SubsetResult | null = null;
+  for (const cand of refineSet) {
+    const r = optimizeSubset(ev, cand.indices, cand.theta, 0.35, 450);
+    if (!best || penalized(r) < penalized(best)) best = r;
+  }
+  await new Promise(res => setTimeout(res, 0));
+
+  // --- Cleanup: drop trace components, re-optimise, so that the displayed
+  // recipe is *exactly* the mixture being evaluated --------------------------
+  let indices = best!.indices.slice();
+  let weights = best!.weights.slice();
+  let de = best!.de;
+  for (let guard = 0; guard < MAX_RECIPE_PIGMENTS; guard++) {
+    if (indices.length <= 1) break;
+    const keep = weights.map(w => w >= MIN_COMPONENT);
+    if (keep.every(Boolean)) break;
+    let maxJ = 0;
+    weights.forEach((w, j) => { if (w > weights[maxJ]) maxJ = j; });
+    keep[maxJ] = true; // never drop the dominant paint
+    const nextIdx = indices.filter((_, j) => keep[j]);
+    const sum = weights.reduce((acc, w, j) => acc + (keep[j] ? w : 0), 0);
+    const nextW = weights.filter((_, j) => keep[j]).map(w => w / sum);
+    const theta0 = nextW.slice(0, -1).map(w =>
+      Math.log(Math.max(1e-9, w) / Math.max(1e-9, nextW[nextW.length - 1])),
+    );
+    const r = optimizeSubset(ev, nextIdx, theta0, 0.25, 250);
+    indices = r.indices;
+    weights = r.weights;
+    de = r.de;
+  }
+
+  // --- Quantise to practical mixing parts (Golden MXR-style ratios) ---------
+  const partsW = new Float64Array(indices.length);
+  let partsBest: { parts: number[]; de: number } | null = null;
+  const seen = new Set<string>();
+  for (let total = 1; total <= 24; total++) {
+    const parts = weights.map(w => Math.max(1, Math.round(w * total)));
+    const key = parts.join(',');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const sum = parts.reduce((a, b) => a + b, 0);
+    parts.forEach((p, j) => { partsW[j] = p / sum; });
+    const pde = ev.deltaE(indices, partsW);
+    const better =
+      !partsBest ||
+      pde < partsBest.de - 1e-6 ||
+      (Math.abs(pde - partsBest.de) <= 1e-6 &&
+        sum < partsBest.parts.reduce((a, b) => a + b, 0));
+    if (better) partsBest = { parts: parts.slice(), de: pde };
+    if (pde <= de + 0.15) break; // good enough and smallest total wins
+  }
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const partsG = partsBest!.parts.reduce((a, b) => gcd(a, b));
+  const parts = partsBest!.parts.map(p => p / partsG);
+
+  // --- Final evaluation & outputs -------------------------------------------
+  ev.mix(indices, Float64Array.from(weights));
+  const mixR = Array.from(ev.refl);
+  const mixLab = { ...ev.labOfLastMix() };
+  const labD65 = reflectanceToLab(mixR, D65_10);
+  const labA = reflectanceToLab(mixR, A_10);
+  const illuminantShiftDE = deltaE2000(labD65, labA);
+
+  const { r: mr, g: mg, b: mb, clipped } = labToRgb(mixLab.l, mixLab.a, mixLab.b);
+  const mixHex =
+    '#' + [mr, mg, mb].map(v => v.toString(16).padStart(2, '0')).join('');
+
+  const order = indices
+    .map((pi, j) => ({ pi, j }))
+    .sort((a, b) => weights[b.j] - weights[a.j]);
+
+  const recipe: RecipeComponent[] = order.map(({ pi, j }) => ({
+    pigmentId: pigs[pi].id,
+    pigmentName: pigs[pi].name,
+    percentage: weights[j] * 100,
+    hex: pigs[pi].hex,
+  }));
+  const partsLabel = order.map(({ j }) => parts[j]).join(' : ');
+
+  const targetSpectral = smoothestMetamer(targetLab);
   const spectralData: SpectralPoint[] = WAVELENGTHS.map((wl, idx) => ({
     wavelength: wl,
     targetReflectance: targetSpectral[idx],
-    mixReflectance: finalR[idx]
+    mixReflectance: mixR[idx],
   }));
-
-  // Re-calc final lab/hex for display
-  if (bestLab.l === 0) {
-      // Recalculate if loop didn't update (rare)
-      const fKS = calculateMixKS(bestAmounts, activeKS);
-      const fR = fKS.map(k => ksToReflectance(k));
-      bestLab = spectralToLab(fR);
-  }
-  const bestRgb = labToRgb(bestLab.l, bestLab.a, bestLab.b);
-  const mixHex = rgbToHex(bestRgb.r, bestRgb.g, bestRgb.b);
 
   return {
     recipe,
-    deltaE: bestError,
+    deltaE: de,
     mixHex,
-    explanation: `Solved via Stochastic Hill Climbing with Smart Initialization. Starting point was optimized by testing pure pigments and tints before fine-tuning.`,
-    spectralData
+    mixLab,
+    targetLab,
+    partsLabel,
+    partsDeltaE: partsBest!.de,
+    illuminantShiftDE,
+    gamutClipped: clipped,
+    modelUsed: model,
+    explanation:
+      `Deterministic search: every ${indices.length <= cap ? `1–${cap}` : ''}-paint ` +
+      `subset of the ${pool.length} most relevant pigments was optimised with ` +
+      `Nelder–Mead (CIEDE2000 objective, ${ev.evalCount.toLocaleString()} spectral ` +
+      `evaluations). Mixing model: ${MODEL_LABELS[model]}; Saunderson ingest ` +
+      `k1=${SAUNDERSON_K1}, k2=${SAUNDERSON_K2} on Golden's measured 10 nm ` +
+      `reflectance, D65/10° observer.`,
+    spectralData,
   };
 };

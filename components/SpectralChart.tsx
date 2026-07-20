@@ -49,21 +49,21 @@ const SpectralChart: React.FC<SpectralChartProps> = ({ data }) => {
               labelStyle={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: '10px' }}
             />
             <Legend wrapperStyle={{ fontSize: '12px', fontFamily: 'Inter' }} />
-            <Line 
-              type="monotone" 
-              dataKey="targetReflectance" 
-              name="Target (Reconstructed)" 
-              stroke="#38bdf8" 
-              strokeWidth={2} 
+            <Line
+              type="monotone"
+              dataKey="targetReflectance"
+              name="Target (smoothest metamer)"
+              stroke="#38bdf8"
+              strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
             />
-            <Line 
-              type="monotone" 
-              dataKey="mixReflectance" 
-              name="Mixture (K-M Model)" 
-              stroke="#f472b6" 
-              strokeWidth={2} 
+            <Line
+              type="monotone"
+              dataKey="mixReflectance"
+              name="Mixture (predicted)"
+              stroke="#f472b6"
+              strokeWidth={2}
               strokeDasharray="5 5"
               dot={false}
             />

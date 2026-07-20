@@ -30,6 +30,10 @@ src-tauri/gen/
 *.xlsx
 Golden CIELAB Values.csv
 
+# Google Drive sync writes these everywhere (including .git/refs — delete
+# those by hand if fetch ever reports "bad object refs/desktop.ini").
+desktop.ini
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

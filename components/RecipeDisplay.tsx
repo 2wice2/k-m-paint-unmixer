@@ -15,8 +15,8 @@ const RecipeDisplay: React.FC<RecipeDisplayProps> = ({ result, targetHex, loadin
     return (
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full flex flex-col items-center justify-center animate-pulse">
         <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
-        <p className="text-sm font-mono text-slate-500">Optimizing K/S Coefficients...</p>
-        <p className="text-xs text-slate-400 mt-2">Solving Transport Equations</p>
+        <p className="text-sm font-mono text-slate-500">Searching pigment subsets…</p>
+        <p className="text-xs text-slate-400 mt-2">Kubelka–Munk mixing · Nelder–Mead · CIEDE2000</p>
         
         {/* Live Timer */}
         <div className="mt-6 flex items-center gap-2 px-3 py-1 bg-indigo-50 rounded-full text-indigo-600 border border-indigo-100">
@@ -62,12 +62,29 @@ const RecipeDisplay: React.FC<RecipeDisplayProps> = ({ result, targetHex, loadin
       </div>
 
       {/* Visual Result Comparison */}
-      <div className="flex w-full h-16 rounded-xl overflow-hidden shadow-sm mb-6 border border-slate-200">
+      <div className="flex w-full h-16 rounded-xl overflow-hidden shadow-sm mb-2 border border-slate-200">
         <div className="flex-1 flex flex-col items-center justify-center relative" style={{ backgroundColor: targetHex }}>
            <span className="text-[10px] font-bold text-white/80 bg-black/20 px-2 py-0.5 rounded backdrop-blur-sm">TARGET</span>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center relative" style={{ backgroundColor: result.mixHex }}>
            <span className="text-[10px] font-bold text-white/80 bg-black/20 px-2 py-0.5 rounded backdrop-blur-sm">MIX</span>
+        </div>
+      </div>
+      {result.gamutClipped && (
+        <p className="text-[11px] text-amber-600 mb-2">
+          Predicted colour lies outside sRGB — the MIX swatch is a clipped approximation.
+        </p>
+      )}
+
+      {/* Practical mixing ratio */}
+      <div className="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-2.5 mb-6">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Mix by parts</div>
+          <div className="text-lg font-mono font-bold text-indigo-800">{result.partsLabel}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] font-mono text-indigo-400">ΔE₀₀ of ratio</div>
+          <div className="text-sm font-mono font-semibold text-indigo-700">{result.partsDeltaE.toFixed(2)}</div>
         </div>
       </div>
 

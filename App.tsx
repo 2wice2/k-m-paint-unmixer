@@ -5,8 +5,15 @@ import ColorPicker from './components/ColorPicker';
 import PaletteManager from './components/PaletteManager';
 import RecipeDisplay from './components/RecipeDisplay';
 import SpectralChart from './components/SpectralChart';
-import { AppState, UnmixResult, LabColor } from './types';
+import { AppState, UnmixResult, LabColor, MixModel } from './types';
 import { solvePhysicsRecipe } from './services/physicsEngine';
+
+const MODEL_OPTIONS: { value: MixModel; label: string; hint: string }[] = [
+  { value: 'kmcal', label: 'K-M calibrated', hint: "γ-calibrated Kubelka–Munk: 100% of a paint reproduces Golden's measured fully-opaque colour (default)" },
+  { value: 'km2c', label: 'K-M 2-constant', hint: 'Scattering-weighted K-M with opacity-class weights; thin-film endpoints — comparison mode' },
+  { value: 'km1c', label: 'K-M 1-constant', hint: 'Classic single-constant Kubelka–Munk — tends to overweight strong tinters in white mixes' },
+  { value: 'wgm', label: 'Geometric mean', hint: "Scott Burns' weighted geometric mean of reflectance — simple, robust alternative" },
+];
 
 const App: React.FC = () => {
   // State
@@ -16,6 +23,7 @@ const App: React.FC = () => {
     AVAILABLE_PIGMENTS.map(p => p.id)
   );
   const [maxPigments, setMaxPigments] = useState<number>(5);
+  const [mixModel, setMixModel] = useState<MixModel>('kmcal');
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [result, setResult] = useState<UnmixResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -59,7 +67,7 @@ const App: React.FC = () => {
       return;
     }
 
-    setAppState(AppState.ANALYZING);
+    setAppState(AppState.SOLVING);
     setErrorMsg(null);
     setCalcTime(0);
     setElapsedTime(0);
@@ -67,21 +75,18 @@ const App: React.FC = () => {
 
     const activePalette = AVAILABLE_PIGMENTS.filter(p => selectedPigmentIds.includes(p.id));
 
-    setTimeout(async () => {
-      setAppState(AppState.SOLVING);
-      // Allow UI to paint before blocking with heavy math loop
-      await new Promise(r => setTimeout(r, 100));
-      try {
-        const physicsResult = await solvePhysicsRecipe(targetHex, activePalette, maxPigments);
-        setResult(physicsResult);
-        setCalcTime(performance.now() - startTimeRef.current);
-        setAppState(AppState.COMPLETE);
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : 'Calculation failed';
-        setErrorMsg(message);
-        setAppState(AppState.ERROR);
-      }
-    }, 600);
+    // One tick so the spinner paints before the solver starts crunching.
+    await new Promise(r => setTimeout(r, 30));
+    try {
+      const physicsResult = await solvePhysicsRecipe(targetHex, activePalette, maxPigments, mixModel);
+      setResult(physicsResult);
+      setCalcTime(performance.now() - startTimeRef.current);
+      setAppState(AppState.COMPLETE);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Calculation failed';
+      setErrorMsg(message);
+      setAppState(AppState.ERROR);
+    }
   };
 
   return (
@@ -105,9 +110,8 @@ const App: React.FC = () => {
                <div className="flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full border border-slate-200">
                   <div className={`w-2 h-2 rounded-full ${appState === AppState.IDLE || appState === AppState.COMPLETE ? 'bg-green-500' : 'bg-indigo-500 animate-pulse'}`}></div>
                   <span className="text-xs font-mono font-medium text-slate-600">
-                    {appState === AppState.IDLE ? 'SYSTEM READY' : 
-                     appState === AppState.ANALYZING ? 'RECONSTRUCTING SPECTRA' : 
-                     appState === AppState.SOLVING ? 'OPTIMIZING RECIPE' : 
+                    {appState === AppState.IDLE ? 'SYSTEM READY' :
+                     appState === AppState.ANALYZING || appState === AppState.SOLVING ? 'OPTIMIZING RECIPE' :
                      appState === AppState.ERROR ? 'SYSTEM ERROR' : 'CALCULATION COMPLETE'}
                   </span>
                </div>
@@ -133,6 +137,32 @@ const App: React.FC = () => {
               maxPigments={maxPigments}
               onMaxPigmentsChange={setMaxPigments}
             />
+
+            {/* Mixing model selector */}
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Mixing Model</h2>
+              <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1">
+                {MODEL_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    title={opt.hint}
+                    onClick={() => setMixModel(opt.value)}
+                    disabled={appState === AppState.ANALYZING || appState === AppState.SOLVING}
+                    className={`px-2 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+                      mixModel === opt.value
+                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2 leading-snug">
+                {MODEL_OPTIONS.find(o => o.value === mixModel)?.hint}
+              </p>
+            </div>
 
             <button
               onClick={handleUnmix}
@@ -163,13 +193,20 @@ const App: React.FC = () => {
             <div className="bg-slate-900 rounded-2xl p-6 shadow-xl border border-slate-700">
               <div className="flex justify-between items-end mb-4">
                  <div>
-                    <h2 className="text-white font-bold text-lg">Spectral Reconstruction</h2>
-                    <p className="text-slate-400 text-sm">Target vs. Mixture Reflectance (400nm - 700nm)</p>
+                    <h2 className="text-white font-bold text-lg">Spectral Prediction</h2>
+                    <p className="text-slate-400 text-sm">Smoothest metamer of target vs. mixture reflectance (400–700 nm)</p>
                  </div>
                  {result && (
-                   <div className="text-right">
-                      <div className="text-slate-400 text-xs font-mono mb-1">METAMERISM INDEX</div>
-                      <div className="text-emerald-400 font-mono text-sm">LOW (MATCH)</div>
+                   <div className="text-right" title="How much the mixed paint's colour drifts between daylight (D65) and incandescent light (Illuminant A), after adaptation — CIEDE2000.">
+                      <div className="text-slate-400 text-xs font-mono mb-1">ILLUM. SHIFT D65→A</div>
+                      <div className={`font-mono text-sm ${
+                        result.illuminantShiftDE < 2.5 ? 'text-emerald-400'
+                        : result.illuminantShiftDE < 5 ? 'text-amber-400'
+                        : 'text-red-400'
+                      }`}>
+                        {result.illuminantShiftDE < 2.5 ? 'LOW' : result.illuminantShiftDE < 5 ? 'MODERATE' : 'HIGH'}
+                        {' '}(ΔE₀₀ {result.illuminantShiftDE.toFixed(1)})
+                      </div>
                    </div>
                  )}
               </div>
