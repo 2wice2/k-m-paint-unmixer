@@ -1,5 +1,5 @@
 import { MixModel, Pigment, RecipeComponent, SpectralPoint, UnmixResult } from '../types';
-import { CALIBRATION, SCATTERING_S, SPECTRAL_R_DATA, WAVELENGTHS } from '../constants';
+import { AVAILABLE_PIGMENTS, CALIBRATION, SCATTERING_S, SPECTRAL_R_DATA, WAVELENGTHS } from '../constants';
 import {
   A_10,
   D65_10,
@@ -176,6 +176,44 @@ const LAB_EPS = 216 / 24389;
 const LAB_KAPPA = 24389 / 27;
 const fLabFast = (t: number): number =>
   t > LAB_EPS ? Math.cbrt(t) : (LAB_KAPPA * t + 16) / 116;
+
+/**
+ * Forward-evaluate an arbitrary mixture (e.g. a recipe quantised to pen
+ * units) without running the solver: predicted Lab, sRGB hex, and CIEDE2000
+ * vs `targetLab`, under the given mixing model. Weights are normalised
+ * internally; components without spectral data are ignored.
+ */
+export const evaluateMixture = (
+  components: { pigmentId: string; weight: number }[],
+  targetLab: LabColor,
+  model: MixModel = 'kmcal',
+): { deltaE: number; lab: LabColor; hex: string; clipped: boolean } => {
+  const palette = components
+    .map(c => AVAILABLE_PIGMENTS.find(p => p.id === c.pigmentId))
+    .filter((p): p is Pigment => !!p);
+  const pigs = preparePalette(palette);
+  if (pigs.length === 0) throw new Error('No spectral data for mixture components.');
+
+  const indices: number[] = [];
+  const raw: number[] = [];
+  for (const c of components) {
+    const i = pigs.findIndex(p => p.id === c.pigmentId);
+    if (i !== -1 && c.weight > 0) {
+      indices.push(i);
+      raw.push(c.weight);
+    }
+  }
+  const sum = raw.reduce((a, b) => a + b, 0);
+  if (sum <= 0) throw new Error('Mixture has no positive weights.');
+  const weights = Float64Array.from(raw, w => w / sum);
+
+  const ev = new Evaluator(pigs, model, targetLab);
+  const deltaE = ev.deltaE(indices, weights);
+  const lab = { ...ev.labOfLastMix() };
+  const { r, g, b, clipped } = labToRgb(lab.l, lab.a, lab.b);
+  const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+  return { deltaE, lab, hex, clipped };
+};
 
 // ---------------------------------------------------------------------------
 // Deterministic Nelder–Mead over the simplex (softmax parameterisation).
