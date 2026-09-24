@@ -275,22 +275,25 @@ share a drying window.
 The **Measurements** panel (left column) imports reflectance spectra and
 resamples them to the solver's 400–700 nm / 20 nm grid. Lab is always
 recomputed from the spectrum under **D65 / 2°**, the same maths the solver
-uses. ArgyllCMS prints **D50** Lab by default, so its printed Lab numbers will
-not match the app's. That's expected; the spectrum is what counts.
+uses. ArgyllCMS prints **D50** Lab by default. Run spotread with `-i D65` so its
+printed Lab uses the same illuminant as the app (the default observer, 1931 2°,
+already matches). Small differences can remain, because the app integrates on a
+coarser 20 nm grid. The spectrum is what the app uses.
 
 **Accepted input** (files or pasted text):
 
 | Source | How |
 |---|---|
-| `spotread -s` (ColorMunki spot readings) | Copy the console output for one or more readings and paste it into the box. The importer looks for `Spectrum from … to … in N steps` followed by the values. |
+| **`spotread -s -i D65 swatches.txt` log file (recommended)** | spotread appends every reading to `swatches.txt` as a tab-separated row: `Reading X Y Z L* a* b* 380.000 … 730.000`. Import the file. Rows are labelled `reading 1`, `reading 2`, and so on, in the order taken, so keep a paper list of which reading was which spot. |
+| `spotread -s` console output | Copy one or more readings from the terminal and paste them into the box. The importer reads each `Spectrum from 380.000 to 730.000 nm in 36 steps` line and the comma-separated values that follow it. |
 | CGATS files: `.ti3` from `chartread`, `.sp`, i1Profiler / ColorPort exports | Import the file. Spectral columns named `SPEC_380`…`SPEC_730` (or `SPECTRAL_`, `R_`, `nm`) are read, scaled by `SPECTRAL_NORM` when present. Rows are labelled by `SAMPLE_NAME`, `SAMPLE_LOC` or `SAMPLE_ID`. |
 | CSV / TSV | A header row of wavelengths (`name,400,410,…,700`), one reading per row. |
 
-Readings must cover 400–700 nm. Values in percent or 0–1 are detected per file.
+Readings must cover 400–700 nm. spotread data is always in percent: the ColorMunki and i1Pro drivers report reflectance on a 0–100 scale, so it is divided by 100 unconditionally. For other files, percent or 0–1 is taken from `SPECTRAL_NORM` if present, and otherwise detected per file.
 
 **Workflow per swatch:**
 
-1. Calibrate (ColorMunki dial to calibrate, `spotread -s`, then dial to measure).
+1. Start `spotread -s -i D65 swatches.txt` with the ColorMunki dial on calibrate. Let it calibrate, then turn the dial to measure. Use one log file per session.
 2. Take 3 readings over the white half and 3 over the black half, through a
    positioning template.
 3. Paste or import them. Tick the three over-white readings, then **Mix / white**

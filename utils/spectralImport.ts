@@ -99,10 +99,17 @@ const parseCgats = (text: string): RawFile | null => {
   return { spectra: out, norm };
 };
 
+// ArgyllCMS instrument drivers (ColorMunki, i1Pro) report reflective spectra
+// in percent (xspect norm = 100), so spotread output is always scaled by 100.
+const ARGYLL_REFLECTIVE_NORM = 100;
+
 // --- spotread -s console output (pasted) ---
-// " Spectrum from 380.000000 to 730.000000 in 36 steps" followed by the values.
+// From spotread.c:
+//   "Spectrum from 380.000 to 730.000 nm in 36 steps"
+//   "3.12, 3.4, …"            (values, %g, comma separated)
+//   "Peak value 92.1 at (aprox.) 610.0 nm"
 const parseSpotread = (text: string): RawFile | null => {
-  const re = /Spectrum from\s+([\d.]+)\s+to\s+([\d.]+)\s+in\s+(\d+)\s+steps/gi;
+  const re = /Spectrum from\s+([\d.]+)\s+to\s+([\d.]+)\s*(?:nm)?\s+in\s+(\d+)\s+steps/gi;
   const out: RawSpectrum[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
@@ -118,7 +125,7 @@ const parseSpotread = (text: string): RawFile | null => {
       values,
     });
   }
-  return out.length ? { spectra: out } : null;
+  return out.length ? { spectra: out, norm: ARGYLL_REFLECTIVE_NORM } : null;
 };
 
 // --- CSV / TSV with wavelength column headers (e.g. name,400,410,…,700) ---
@@ -131,16 +138,20 @@ const parseDelimited = (text: string): RawFile | null => {
     .map((h, i) => ({ i, nm: /^\d{3}(\.\d+)?$/.test(h) ? Number(h) : spectralFieldNm(h) }))
     .filter((c): c is { i: number; nm: number } => c.nm !== null);
   if (specCols.length < 2) return null;
+  // spotread's optional log file ("spotread -s log.txt") is TSV with header
+  // "Reading X Y Z L* a* b* 380.000 390.000 …" and values in percent.
+  const isSpotreadLog = header[0] === 'Reading' && header.includes('L*');
   const labelIdx = header.findIndex((_, i) => !specCols.some(c => c.i === i));
   const spectra = lines.slice(1).map((line, r) => {
     const cells = line.split(delim).map(c => c.trim().replace(/^"|"$/g, ''));
+    const name = labelIdx !== -1 && cells[labelIdx] ? cells[labelIdx] : `#${r + 1}`;
     return {
-      label: labelIdx !== -1 && cells[labelIdx] ? cells[labelIdx] : `#${r + 1}`,
+      label: isSpotreadLog ? `reading ${name}` : name,
       wavelengths: specCols.map(c => c.nm),
       values: specCols.map(c => parseFloat(cells[c.i])),
     };
   });
-  return { spectra };
+  return { spectra, norm: isSpotreadLog ? ARGYLL_REFLECTIVE_NORM : undefined };
 };
 
 export interface ImportResult {
