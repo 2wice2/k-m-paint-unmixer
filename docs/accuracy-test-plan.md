@@ -30,7 +30,7 @@ claims.
 | A5 | ✅ **Fixed.** ~~The recipe you see is not the one that was scored.~~ Trace components are now removed, the recipe renormalised and re-scored, and the explanation shows the ΔE before removal. Components under 0.5 % are dropped after solving and the rest are not renormalised. The ΔE shown is for the unfiltered recipe. | `physicsEngine.ts:315` | The components dropped are exactly the tiny additions of strong pigments (Phthalo, Carbon Black) that matter most. |
 | A6 | ✅ **Fixed.** ~~"ΔE₀₀" is really ΔE76.~~ The engine now optimises and reports true CIEDE2000, checked against Sharma et al.'s published test pairs. Plain Euclidean Lab distance. | `physicsEngine.ts` `calculateDeltaE`, `RecipeDisplay.tsx` | It overstates errors in saturated colours. Score this test in ΔE00 (the log sheet does that). |
 | A7 | **The solver is random with no seed.** The same target can give different recipes on different runs. | `physicsEngine.ts` | Always record the recipe you actually mixed. Never re-run the solver to "look it up" again. |
-| A8 | **Targets can only be entered as sRGB hex.** Cadmium, phthalo and quinacridone colours fall outside sRGB and get clipped. | `ColorPicker.tsx` | For this test, choose targets inside sRGB, or accept that the target has shifted. |
+| A8 | ✅ **Fixed for measured targets.** ~~Targets can only be entered as sRGB hex.~~ An imported reading can now be the target (§9). Hex targets still clip: Cadmium, phthalo and quinacridone colours fall outside sRGB and get clipped. | `ColorPicker.tsx` | For this test, choose targets inside sRGB, or accept that the target has shifted. |
 | A9 | **White point bias.** A perfect white (R = 1) maps to Lab (100, 0.65, −0.42), because only Y is normalised on the truncated 20 nm grid. | `physicsEngine.ts` | About 0.8 ΔE of constant bias. Small, but it is the floor. |
 | A10 | ✅ **Fixed.** A Pen Dispense Plan panel now shows units, 60 U pushes, expected mg, mg/U overrides, the minimum batch size and the rounded-recipe ΔE00. | `components/DispensePlan.tsx`, `utils/dispense.ts` | See §4. |
 
@@ -59,7 +59,7 @@ switch the engine to two-constant K-M.
 | Resin filling jig | Back-fills cartridges without air | Holds the cartridge vertical, septum-down, while you fill from the plunger end with a 5–10 ml syringe. |
 | **0.001 g scale** | The core instrument | 1 U of paint is roughly 11–17 mg. A 0.01 g scale can't resolve a single unit. |
 | Leneta 2A opacity charts (black/white) | Substrate | Measure every swatch over **both** black and white. That gives hiding, and it's the standard route to separating K from S. |
-| Spectrophotometer (preferred) or colorimeter | Measurement | Spectral 400–700 nm readings (e.g. Nix Spectro 2 class) are needed for **fitting** in Phase 2. A Lab-only colorimeter is enough for **validation** in Phases 3–4. A phone camera is not good enough. |
+| Spectrophotometer: used X-Rite ColorMunki Photo/Design or i1Pro 2 + ArgyllCMS | Measurement | Spectral 400–700 nm readings are needed for **fitting** in Phase 2; Lab for Phases 3–4 is computed from the same spectra. See §9 for getting readings into the app. A phone camera is not good enough. |
 | Spare Penfill cartridges | One per colour, plus 3–4 for white | You'll use around 25–30 ml of white in total. |
 | Small mixing cups/palette, silicone spatula, timer, water pot | | Park the outlet in water between doses. |
 
@@ -210,7 +210,7 @@ as the truth. Otherwise use the hex.
 For each target:
 
 1. Solve with the app, palette = your core set, max pigments = 3.
-2. **Screenshot or write down the recipe** (A7).
+2. **Record the recipe** (A7). Once the swatch is measured, **Copy log rows** in the Measured Swatch section captures the recipe, units, prediction and measurement together.
 3. Dispense a 100 U batch (200 U if any component is under 5 U). Weigh every
    addition.
 4. Dry for 48 h, then measure.
@@ -267,3 +267,47 @@ for less than a third of the total error.
 
 About 2 weeks of wall-clock time, mostly spent drying. Phases 1 and 2 can
 share a drying window.
+
+---
+
+## 9. Getting measurements into the app (ArgyllCMS)
+
+The **Measurements** panel (left column) imports reflectance spectra and
+resamples them to the solver's 400–700 nm / 20 nm grid. Lab is always
+recomputed from the spectrum under **D65 / 2°**, the same maths the solver
+uses. ArgyllCMS prints **D50** Lab by default, so its printed Lab numbers will
+not match the app's. That's expected; the spectrum is what counts.
+
+**Accepted input** (files or pasted text):
+
+| Source | How |
+|---|---|
+| `spotread -s` (ColorMunki spot readings) | Copy the console output for one or more readings and paste it into the box. The importer looks for `Spectrum from … to … in N steps` followed by the values. |
+| CGATS files: `.ti3` from `chartread`, `.sp`, i1Profiler / ColorPort exports | Import the file. Spectral columns named `SPEC_380`…`SPEC_730` (or `SPECTRAL_`, `R_`, `nm`) are read, scaled by `SPECTRAL_NORM` when present. Rows are labelled by `SAMPLE_NAME`, `SAMPLE_LOC` or `SAMPLE_ID`. |
+| CSV / TSV | A header row of wavelengths (`name,400,410,…,700`), one reading per row. |
+
+Readings must cover 400–700 nm. Values in percent or 0–1 are detected per file.
+
+**Workflow per swatch:**
+
+1. Calibrate (ColorMunki dial to calibrate, `spotread -s`, then dial to measure).
+2. Take 3 readings over the white half and 3 over the black half, through a
+   positioning template.
+3. Paste or import them. Tick the three over-white readings, then **Mix / white**
+   (they are averaged). Do the same for the over-black readings with **Mix / black**.
+4. The **Measured Swatch** section under the dispense plan now shows:
+   - **Model ΔE₀₀**: measured vs the app's prediction for the rounded recipe.
+   - **Target ΔE₀₀**: measured vs the target.
+   - **Hiding ΔE₀₀**: over-white vs over-black. Above 0.5, the film is not opaque.
+5. Fill in phase and swatch ID, then **Copy log rows** (or **Download .csv**) and
+   paste the rows into `accuracy-test-log.csv`. Add `weighed_mg`,
+   `cartridge_fill_date` and `dry_hours` by hand.
+
+**Measured targets (Phase 4):** measure the physical target the same way, tick
+its readings and press **Target**. The solver then aims at the measured Lab
+instead of an sRGB hex, which avoids sRGB clipping (A8). The chart shows the
+real target spectrum instead of the synthetic one.
+
+Keep the raw ArgyllCMS files. The Phase 2 K/S fit will use the full spectra, not
+the Lab values.
+

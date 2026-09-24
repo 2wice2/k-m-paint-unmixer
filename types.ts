@@ -19,12 +19,14 @@ export interface UnmixResult {
   mixHex: string; // The visual color of the mixture
   explanation: string;
   spectralData: SpectralPoint[];
+  targetLab: LabColor;
 }
 
 export interface SpectralPoint {
   wavelength: number;
   targetReflectance: number;
   mixReflectance: number;
+  measuredReflectance?: number;
 }
 
 export interface LabColor {

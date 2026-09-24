@@ -13,9 +13,10 @@ import { SpectralPoint } from '../types';
 
 interface SpectralChartProps {
   data: SpectralPoint[];
+  targetMeasured?: boolean;
 }
 
-const SpectralChart: React.FC<SpectralChartProps> = ({ data }) => {
+const SpectralChart: React.FC<SpectralChartProps> = ({ data, targetMeasured }) => {
   return (
     <div className="w-full h-64 bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col">
       <h3 className="text-xs font-mono text-slate-400 mb-2 shrink-0">SPECTRAL REFLECTANCE CURVE (R∞)</h3>
@@ -52,7 +53,7 @@ const SpectralChart: React.FC<SpectralChartProps> = ({ data }) => {
             <Line 
               type="monotone" 
               dataKey="targetReflectance" 
-              name="Target (Reconstructed)" 
+              name={targetMeasured ? "Target (Measured)" : "Target (Reconstructed)"} 
               stroke="#38bdf8" 
               strokeWidth={2} 
               dot={false}
@@ -67,6 +68,16 @@ const SpectralChart: React.FC<SpectralChartProps> = ({ data }) => {
               strokeDasharray="5 5"
               dot={false}
             />
+            {data.some(d => d.measuredReflectance !== undefined) && (
+              <Line
+                type="monotone"
+                dataKey="measuredReflectance"
+                name="Measured Mix"
+                stroke="#fbbf24"
+                strokeWidth={2}
+                dot={{ r: 2 }}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>

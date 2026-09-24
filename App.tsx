@@ -6,8 +6,11 @@ import PaletteManager from './components/PaletteManager';
 import RecipeDisplay from './components/RecipeDisplay';
 import SpectralChart from './components/SpectralChart';
 import DispensePlan from './components/DispensePlan';
+import MeasurementPanel, { MeasurementRole } from './components/MeasurementPanel';
+import { SpectralReading } from './utils/spectralImport';
+import { labToRgb, rgbToHex } from './utils/colorUtils';
 import { AppState, UnmixResult, LabColor } from './types';
-import { solvePhysicsRecipe } from './services/physicsEngine';
+import { solvePhysicsRecipe, spectralToLab } from './services/physicsEngine';
 
 const App: React.FC = () => {
   // State
@@ -25,6 +28,14 @@ const App: React.FC = () => {
   
   const startTimeRef = useRef<number>(0);
 
+  // Imported spectrophotometer readings and what each is used for.
+  const [readings, setReadings] = useState<SpectralReading[]>([]);
+  const [measuredTarget, setMeasuredTarget] = useState<SpectralReading | null>(null);
+  const [overWhite, setOverWhite] = useState<SpectralReading | null>(null);
+  const [overBlack, setOverBlack] = useState<SpectralReading | null>(null);
+  // Target description captured at solve time, for the log and chart legend.
+  const [solvedTargetLabel, setSolvedTargetLabel] = useState<string>('');
+
   // Live timer effect
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -38,12 +49,31 @@ const App: React.FC = () => {
 
   // Handlers
   const handleColorChange = (hex: string, lab: LabColor) => {
+    setMeasuredTarget(null);
     setTargetHex(hex);
     setTargetLab(lab);
     setResult(null); // Reset result on new target
     setAppState(AppState.IDLE);
     setCalcTime(0);
     setElapsedTime(0);
+  };
+
+  const handleAssignMeasurement = (role: MeasurementRole, reading: SpectralReading) => {
+    if (role === 'target') {
+      const lab = spectralToLab(reading.reflectance);
+      const rgb = labToRgb(lab.l, lab.a, lab.b);
+      setMeasuredTarget(reading);
+      setTargetHex(rgbToHex(rgb.r, rgb.g, rgb.b));
+      setTargetLab(lab);
+      setResult(null);
+      setAppState(AppState.IDLE);
+      setCalcTime(0);
+      setElapsedTime(0);
+    } else if (role === 'overWhite') {
+      setOverWhite(reading);
+    } else {
+      setOverBlack(reading);
+    }
   };
 
   const handleTogglePigment = (id: string) => {
@@ -73,7 +103,11 @@ const App: React.FC = () => {
       // Allow UI to paint before blocking with heavy math loop
       await new Promise(r => setTimeout(r, 100));
       try {
-        const physicsResult = await solvePhysicsRecipe(targetHex, activePalette, maxPigments);
+        const measured = measuredTarget
+          ? { lab: spectralToLab(measuredTarget.reflectance), reflectance: measuredTarget.reflectance }
+          : undefined;
+        const physicsResult = await solvePhysicsRecipe(targetHex, activePalette, maxPigments, measured);
+        setSolvedTargetLabel(measuredTarget ? `measured ${measuredTarget.label} (${measuredTarget.source})` : targetHex);
         setResult(physicsResult);
         setCalcTime(performance.now() - startTimeRef.current);
         setAppState(AppState.COMPLETE);
@@ -84,6 +118,11 @@ const App: React.FC = () => {
       }
     }, 600);
   };
+
+  const measuredMix = overWhite ?? overBlack;
+  const chartData = result
+    ? result.spectralData.map((p, i) => ({ ...p, measuredReflectance: measuredMix?.reflectance[i] }))
+    : INITIAL_SPECTRAL_DATA;
 
   return (
     <Router>
@@ -150,6 +189,23 @@ const App: React.FC = () => {
                 : 'Processing...'}
             </button>
             
+            {measuredTarget && (
+              <div className="bg-indigo-50 text-indigo-700 p-3 rounded-lg text-xs border border-indigo-200 flex items-center justify-between gap-2">
+                <span>
+                  Target is measured reading <strong>{measuredTarget.label}</strong> — L* {targetLab.l.toFixed(1)}, a* {targetLab.a.toFixed(1)}, b* {targetLab.b.toFixed(1)}. The hex above is only a preview.
+                </span>
+                <button type="button" onClick={() => setMeasuredTarget(null)} className="shrink-0 underline">Clear</button>
+              </div>
+            )}
+
+            <MeasurementPanel
+              readings={readings}
+              onReadingsChange={setReadings}
+              onAssign={handleAssignMeasurement}
+              assigned={{ target: measuredTarget, overWhite, overBlack }}
+              disabled={appState === AppState.ANALYZING || appState === AppState.SOLVING}
+            />
+
             {errorMsg && (
               <div className="bg-red-50 text-red-600 p-4 rounded-lg text-sm border border-red-200">
                 Error: {errorMsg}
@@ -174,7 +230,10 @@ const App: React.FC = () => {
                    </div>
                  )}
               </div>
-              <SpectralChart data={result ? result.spectralData : INITIAL_SPECTRAL_DATA} />
+              <SpectralChart
+                data={chartData}
+                targetMeasured={!!result && solvedTargetLabel.startsWith('measured')}
+              />
             </div>
 
             {/* Recipe Results */}
@@ -189,7 +248,12 @@ const App: React.FC = () => {
             </div>
 
             {result && appState === AppState.COMPLETE && (
-              <DispensePlan result={result} targetHex={targetHex} />
+              <DispensePlan
+                result={result}
+                targetLabel={solvedTargetLabel}
+                measuredOverWhite={overWhite}
+                measuredOverBlack={overBlack}
+              />
             )}
           </div>
         </main>

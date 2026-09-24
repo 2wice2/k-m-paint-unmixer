@@ -1,12 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Syringe, AlertTriangle } from 'lucide-react';
 import { UnmixResult } from '../types';
+import { SpectralReading } from '../utils/spectralImport';
+import MeasuredComparison from './MeasuredComparison';
 import { evaluateRecipe } from '../services/physicsEngine';
 import { planDispense, RecipeBasis, UNIT_UL, MAX_PUSH_UNITS } from '../utils/dispense';
 
 interface DispensePlanProps {
   result: UnmixResult;
-  targetHex: string;
+  targetLabel: string;
+  measuredOverWhite: SpectralReading | null;
+  measuredOverBlack: SpectralReading | null;
 }
 
 const STORAGE_KEY = 'km-unmixer.dispense';
@@ -29,7 +33,7 @@ const loadSettings = (): StoredSettings => {
   }
 };
 
-const DispensePlan: React.FC<DispensePlanProps> = ({ result, targetHex }) => {
+const DispensePlan: React.FC<DispensePlanProps> = ({ result, targetLabel, measuredOverWhite, measuredOverBlack }) => {
   const [settings, setSettings] = useState<StoredSettings>(loadSettings);
   const { batchUnits, basis, minDoseUnits, measuredMgPerUnit } = settings;
 
@@ -56,7 +60,7 @@ const DispensePlan: React.FC<DispensePlanProps> = ({ result, targetHex }) => {
     [result.recipe, batchUnits, basis, minDoseUnits, measuredMgPerUnit]
   );
 
-  const rounded = useMemo(() => evaluateRecipe(targetHex, plan.roundedParts), [targetHex, plan.roundedParts]);
+  const rounded = useMemo(() => evaluateRecipe(result.targetLab, plan.roundedParts), [result.targetLab, plan.roundedParts]);
   const anyBelowMin = plan.rows.some(r => r.belowMinDose);
   const anyEstimated = plan.rows.some(r => !r.measured);
 
@@ -190,6 +194,17 @@ const DispensePlan: React.FC<DispensePlanProps> = ({ result, targetHex }) => {
           {basis === 'mass' ? ' — in mass mode they change the unit split, not just the expected weights.' : '.'}
         </p>
       )}
+
+      <MeasuredComparison
+        result={result}
+        plan={plan}
+        basis={basis}
+        batchUnits={batchUnits}
+        predicted={rounded}
+        targetLabel={targetLabel}
+        overWhite={measuredOverWhite}
+        overBlack={measuredOverBlack}
+      />
     </div>
   );
 };

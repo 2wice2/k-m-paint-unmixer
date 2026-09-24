@@ -113,7 +113,9 @@ const rgbToSpectralApprox = (r: number, g: number, b: number): number[] => {
   });
 };
 
-const spectralToLab = (reflectance: number[]): LabColor => {
+// Reflectance on the WAVELENGTHS grid → CIELAB (D65, 2°), same pipeline the
+// solver uses, so measured and predicted colours are directly comparable.
+export const spectralToLab = (reflectance: number[]): LabColor => {
   let X = 0, Y = 0, Z = 0;
   
   for (let i = 0; i < reflectance.length; i++) {
@@ -221,7 +223,7 @@ export interface RecipeEvaluation {
 // Score an arbitrary recipe (fractions need not sum to 1) against a target.
 // Used to re-check a recipe after it has been rounded to dispensable units.
 export const evaluateRecipe = (
-  targetHex: string,
+  targetLab: LabColor,
   parts: { pigmentId: string; fraction: number }[]
 ): RecipeEvaluation | null => {
   const valid = parts.filter(p => p.fraction > 0 && PHYSICAL_PIGMENT_DATA[p.pigmentId]);
@@ -230,8 +232,6 @@ export const evaluateRecipe = (
   const amounts = valid.map(p => p.fraction / total);
   const ks = valid.map(p => PHYSICAL_PIGMENT_DATA[p.pigmentId]);
   const lab = spectralToLab(mixReflectance(amounts, ks));
-  const rgb = hexToRgbTriple(targetHex);
-  const targetLab = rgbToLab(rgb.r, rgb.g, rgb.b);
   const mixRgb = labToRgb(lab.l, lab.a, lab.b);
   return { deltaE: deltaE2000(targetLab, lab), lab, mixHex: rgbToHex(mixRgb.r, mixRgb.g, mixRgb.b) };
 };
@@ -241,14 +241,18 @@ export const evaluateRecipe = (
 export const solvePhysicsRecipe = async (
   targetHex: string,
   palette: Pigment[],
-  maxPigments?: number
+  maxPigments?: number,
+  // A measured target (e.g. an imported spectrophotometer reading). When
+  // given, its Lab is the optimization target and its spectrum is charted,
+  // bypassing the sRGB hex (which clips many paint colours).
+  measuredTarget?: { lab: LabColor; reflectance: number[] }
 ): Promise<UnmixResult> => {
   // 1. Reconstruct Target Spectrum
   const rgb = hexToRgbTriple(targetHex);
   // Target spectrum is kept only for the reference line on the chart; the
   // solver optimizes against the target's true sRGB→Lab value directly.
-  const targetSpectral = rgbToSpectralApprox(rgb.r, rgb.g, rgb.b);
-  const targetLab = rgbToLab(rgb.r, rgb.g, rgb.b);
+  const targetSpectral = measuredTarget?.reflectance ?? rgbToSpectralApprox(rgb.r, rgb.g, rgb.b);
+  const targetLab = measuredTarget?.lab ?? rgbToLab(rgb.r, rgb.g, rgb.b);
 
   // 2. Prepare Palette Data
   const activeKS: number[][] = [];
@@ -422,6 +426,7 @@ export const solvePhysicsRecipe = async (
     recipe,
     deltaE: finalError,
     mixHex,
+    targetLab,
     explanation: `Solved via Stochastic Hill Climbing with Smart Initialization, minimizing CIEDE2000.${pruneNote}`,
     spectralData
   };
