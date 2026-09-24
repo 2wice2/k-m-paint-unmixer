@@ -1,4 +1,4 @@
-import { Pigment, UnmixResult, RecipeComponent, SpectralPoint } from "../types";
+import { Pigment, UnmixResult, RecipeComponent, SpectralPoint, LabColor } from "../types";
 import { PHYSICAL_PIGMENT_DATA, WAVELENGTHS } from "../constants";
 import { labToRgb, rgbToHex, rgbToLab } from "../utils/colorUtils";
 
@@ -113,7 +113,7 @@ const rgbToSpectralApprox = (r: number, g: number, b: number): number[] => {
   });
 };
 
-const spectralToLab = (reflectance: number[]): { l: number, a: number, b: number } => {
+const spectralToLab = (reflectance: number[]): LabColor => {
   let X = 0, Y = 0, Z = 0;
   
   for (let i = 0; i < reflectance.length; i++) {
@@ -138,12 +138,102 @@ const spectralToLab = (reflectance: number[]): { l: number, a: number, b: number
   return { l: L, a, b };
 };
 
-const calculateDeltaE = (lab1: { l: number, a: number, b: number }, lab2: { l: number, a: number, b: number }) => {
-  return Math.sqrt(
-    Math.pow(lab1.l - lab2.l, 2) +
-    Math.pow(lab1.a - lab2.a, 2) +
-    Math.pow(lab1.b - lab2.b, 2)
-  );
+// CIEDE2000 colour difference (Sharma, Wu & Dalal 2005), kL = kC = kH = 1.
+export const deltaE2000 = (lab1: LabColor, lab2: LabColor): number => {
+  const deg = Math.PI / 180;
+  const { l: L1, a: a1, b: b1 } = lab1;
+  const { l: L2, a: a2, b: b2 } = lab2;
+
+  const C1 = Math.hypot(a1, b1);
+  const C2 = Math.hypot(a2, b2);
+  const Cbar7 = Math.pow((C1 + C2) / 2, 7);
+  const G = 0.5 * (1 - Math.sqrt(Cbar7 / (Cbar7 + Math.pow(25, 7))));
+
+  const a1p = (1 + G) * a1;
+  const a2p = (1 + G) * a2;
+  const C1p = Math.hypot(a1p, b1);
+  const C2p = Math.hypot(a2p, b2);
+  const hueAngle = (b: number, ap: number) => {
+    if (b === 0 && ap === 0) return 0;
+    const h = Math.atan2(b, ap) / deg;
+    return h >= 0 ? h : h + 360;
+  };
+  const h1p = hueAngle(b1, a1p);
+  const h2p = hueAngle(b2, a2p);
+
+  const dLp = L2 - L1;
+  const dCp = C2p - C1p;
+  let dhp = 0;
+  if (C1p * C2p !== 0) {
+    dhp = h2p - h1p;
+    if (dhp > 180) dhp -= 360;
+    else if (dhp < -180) dhp += 360;
+  }
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin((dhp / 2) * deg);
+
+  const Lbarp = (L1 + L2) / 2;
+  const Cbarp = (C1p + C2p) / 2;
+  let hbarp = h1p + h2p;
+  if (C1p * C2p !== 0) {
+    if (Math.abs(h1p - h2p) <= 180) hbarp = (h1p + h2p) / 2;
+    else hbarp = h1p + h2p < 360 ? (h1p + h2p + 360) / 2 : (h1p + h2p - 360) / 2;
+  }
+
+  const T = 1
+    - 0.17 * Math.cos((hbarp - 30) * deg)
+    + 0.24 * Math.cos(2 * hbarp * deg)
+    + 0.32 * Math.cos((3 * hbarp + 6) * deg)
+    - 0.20 * Math.cos((4 * hbarp - 63) * deg);
+  const dTheta = 30 * Math.exp(-Math.pow((hbarp - 275) / 25, 2));
+  const Cbarp7 = Math.pow(Cbarp, 7);
+  const RC = 2 * Math.sqrt(Cbarp7 / (Cbarp7 + Math.pow(25, 7)));
+  const SL = 1 + (0.015 * Math.pow(Lbarp - 50, 2)) / Math.sqrt(20 + Math.pow(Lbarp - 50, 2));
+  const SC = 1 + 0.045 * Cbarp;
+  const SH = 1 + 0.015 * Cbarp * T;
+  const RT = -Math.sin(2 * dTheta * deg) * RC;
+
+  const tL = dLp / SL;
+  const tC = dCp / SC;
+  const tH = dHp / SH;
+  return Math.sqrt(tL * tL + tC * tC + tH * tH + RT * tC * tH);
+};
+
+const mixReflectance = (amounts: number[], pigmentKS: number[][]): number[] =>
+  calculateMixKS(amounts, pigmentKS).map(ks => ksToReflectance(ks));
+
+const hexToRgbTriple = (hex: string) => ({
+  r: parseInt(hex.slice(1, 3), 16),
+  g: parseInt(hex.slice(3, 5), 16),
+  b: parseInt(hex.slice(5, 7), 16),
+});
+
+// Components below this fraction are removed from the final recipe (they are
+// not practically dispensable); the survivors are renormalized and the recipe
+// is re-scored so the reported ΔE matches what is shown.
+const MIN_RECIPE_FRACTION = 0.005;
+
+export interface RecipeEvaluation {
+  deltaE: number;
+  mixHex: string;
+  lab: LabColor;
+}
+
+// Score an arbitrary recipe (fractions need not sum to 1) against a target.
+// Used to re-check a recipe after it has been rounded to dispensable units.
+export const evaluateRecipe = (
+  targetHex: string,
+  parts: { pigmentId: string; fraction: number }[]
+): RecipeEvaluation | null => {
+  const valid = parts.filter(p => p.fraction > 0 && PHYSICAL_PIGMENT_DATA[p.pigmentId]);
+  const total = valid.reduce((s, p) => s + p.fraction, 0);
+  if (total <= 0) return null;
+  const amounts = valid.map(p => p.fraction / total);
+  const ks = valid.map(p => PHYSICAL_PIGMENT_DATA[p.pigmentId]);
+  const lab = spectralToLab(mixReflectance(amounts, ks));
+  const rgb = hexToRgbTriple(targetHex);
+  const targetLab = rgbToLab(rgb.r, rgb.g, rgb.b);
+  const mixRgb = labToRgb(lab.l, lab.a, lab.b);
+  return { deltaE: deltaE2000(targetLab, lab), lab, mixHex: rgbToHex(mixRgb.r, mixRgb.g, mixRgb.b) };
 };
 
 // --- Main Solver ---
@@ -154,11 +244,7 @@ export const solvePhysicsRecipe = async (
   maxPigments?: number
 ): Promise<UnmixResult> => {
   // 1. Reconstruct Target Spectrum
-  const rgb = {
-    r: parseInt(targetHex.slice(1, 3), 16),
-    g: parseInt(targetHex.slice(3, 5), 16),
-    b: parseInt(targetHex.slice(5, 7), 16)
-  };
+  const rgb = hexToRgbTriple(targetHex);
   // Target spectrum is kept only for the reference line on the chart; the
   // solver optimizes against the target's true sRGB→Lab value directly.
   const targetSpectral = rgbToSpectralApprox(rgb.r, rgb.g, rgb.b);
@@ -192,10 +278,7 @@ export const solvePhysicsRecipe = async (
 
   // Helper to test a composition
   const evaluate = (amounts: number[]) => {
-    const mixKS = calculateMixKS(amounts, activeKS);
-    const mixR = mixKS.map(ks => ksToReflectance(ks));
-    const mixLab = spectralToLab(mixR);
-    return calculateDeltaE(targetLab, mixLab);
+    return deltaE2000(targetLab, spectralToLab(mixReflectance(amounts, activeKS)));
   };
 
   // Test 1: Pure Pigments
@@ -234,7 +317,6 @@ export const solvePhysicsRecipe = async (
   }
 
   // 4. Optimization (Hill Climbing with Momentum-ish behavior)
-  let bestLab = { l: 0, a: 0, b: 0 };
   const ITERATIONS = 3000;
   const YIELD_INTERVAL = 300;
   
@@ -284,17 +366,13 @@ export const solvePhysicsRecipe = async (
     for (let k = 0; k < candidateAmounts.length; k++) candidateAmounts[k] = capped[k];
 
     // Evaluate
-    const ks = calculateMixKS(candidateAmounts, activeKS);
-    const rVals = ks.map(k => ksToReflectance(k));
-    const lab = spectralToLab(rVals);
-    const error = calculateDeltaE(targetLab, lab);
+    const error = evaluate(candidateAmounts);
 
     // Greedy Step (Accept if better)
     // Optional: Add simulated annealing probability here if needed, but for simple unmixing greedy is usually fine if initialization is good.
     if (error < bestError) {
       bestError = error;
       bestAmounts = candidateAmounts;
-      bestLab = lab;
       currentAmounts = candidateAmounts; // Move to new state
     } else {
         // Occasional random jump to escape local minima if stuck for too long? 
@@ -303,42 +381,48 @@ export const solvePhysicsRecipe = async (
   }
 
   // 5. Finalize Results
-  const recipe: RecipeComponent[] = bestAmounts.map((amt, idx) => {
-    const p = activePigments[idx];
-    return {
-      pigmentId: activeIds[idx],
-      pigmentName: p?.name || 'Unknown',
-      percentage: amt * 100,
-      hex: p?.hex || '#000'
-    };
-  })
-  .filter(r => r.percentage > 0.5)
-  .sort((a, b) => b.percentage - a.percentage);
+  // Drop trace components, renormalize, and re-score so the reported ΔE,
+  // mix swatch and spectrum all describe the recipe exactly as displayed.
+  const prunedCount = bestAmounts.filter(a => a > 0 && a < MIN_RECIPE_FRACTION).length;
+  const finalAmounts = bestAmounts.map(a => (a >= MIN_RECIPE_FRACTION ? a : 0));
+  const finalSum = finalAmounts.reduce((a, b) => a + b, 0);
+  for (let k = 0; k < finalAmounts.length; k++) finalAmounts[k] /= finalSum;
 
-  const finalKS = calculateMixKS(bestAmounts, activeKS);
-  const finalR = finalKS.map(ks => ksToReflectance(ks));
-  
+  const recipe: RecipeComponent[] = finalAmounts
+    .map((amt, idx) => {
+      const p = activePigments[idx];
+      return {
+        pigmentId: activeIds[idx],
+        pigmentName: p?.name || 'Unknown',
+        percentage: amt * 100,
+        hex: p?.hex || '#000'
+      };
+    })
+    .filter(r => r.percentage > 0)
+    .sort((a, b) => b.percentage - a.percentage);
+
+  const finalR = mixReflectance(finalAmounts, activeKS);
+  const finalLab = spectralToLab(finalR);
+  const finalError = deltaE2000(targetLab, finalLab);
+
   const spectralData: SpectralPoint[] = WAVELENGTHS.map((wl, idx) => ({
     wavelength: wl,
     targetReflectance: targetSpectral[idx],
     mixReflectance: finalR[idx]
   }));
 
-  // Re-calc final lab/hex for display
-  if (bestLab.l === 0) {
-      // Recalculate if loop didn't update (rare)
-      const fKS = calculateMixKS(bestAmounts, activeKS);
-      const fR = fKS.map(k => ksToReflectance(k));
-      bestLab = spectralToLab(fR);
-  }
-  const bestRgb = labToRgb(bestLab.l, bestLab.a, bestLab.b);
+  const bestRgb = labToRgb(finalLab.l, finalLab.a, finalLab.b);
   const mixHex = rgbToHex(bestRgb.r, bestRgb.g, bestRgb.b);
+
+  const pruneNote = prunedCount > 0
+    ? ` ${prunedCount} trace component${prunedCount > 1 ? 's' : ''} under ${MIN_RECIPE_FRACTION * 100}% removed; ΔE is for the recipe as shown (${bestError.toFixed(2)} before removal).`
+    : '';
 
   return {
     recipe,
-    deltaE: bestError,
+    deltaE: finalError,
     mixHex,
-    explanation: `Solved via Stochastic Hill Climbing with Smart Initialization. Starting point was optimized by testing pure pigments and tints before fine-tuning.`,
+    explanation: `Solved via Stochastic Hill Climbing with Smart Initialization, minimizing CIEDE2000.${pruneNote}`,
     spectralData
   };
 };

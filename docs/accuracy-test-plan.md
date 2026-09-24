@@ -27,12 +27,12 @@ claims.
 | A2 | **Strong pigments all have about the same tinting strength.** Measured K/S tops out around 10–12 because the drawdown reflectance was converted without a surface-reflection (Saunderson) correction, so the ~4 % gloss floor caps it. | `constants.ts`, `generate_constants.py` | The model says 10 % in white gives L\* 57 for Phthalo Blue, 57 for Ultramarine and 59 for Carbon Black. In real paint Phthalo is many times stronger than Ultramarine. This is the largest error in the model. |
 | A3 | **Single-constant K-M with white acting as a near-zero diluent.** `(K/S)mix = Σ cᵢ(K/S)ᵢ` treats a 50 % tint as half the colourant's K/S. Real tints follow `ΣcᵢKᵢ / ΣcᵢSᵢ`, where white's scattering dominates. | `physicsEngine.ts:39` | Tint ladders come out the wrong shape, not only the wrong level. |
 | A4 | **The data is Heavy Body.** Fluid and High Flow load pigment differently per colour. | `constants.ts` | Recipes are directionally right but systematically off, and by a different amount for each pigment. |
-| A5 | **The recipe you see is not the one that was scored.** Components under 0.5 % are dropped after solving and the rest are not renormalised. The ΔE shown is for the unfiltered recipe. | `physicsEngine.ts:315` | The components dropped are exactly the tiny additions of strong pigments (Phthalo, Carbon Black) that matter most. |
-| A6 | **"ΔE₀₀" is really ΔE76.** Plain Euclidean Lab distance. | `physicsEngine.ts` `calculateDeltaE`, `RecipeDisplay.tsx` | It overstates errors in saturated colours. Score this test in ΔE00 (the log sheet does that). |
+| A5 | ✅ **Fixed.** ~~The recipe you see is not the one that was scored.~~ Trace components are now removed, the recipe renormalised and re-scored, and the explanation shows the ΔE before removal. Components under 0.5 % are dropped after solving and the rest are not renormalised. The ΔE shown is for the unfiltered recipe. | `physicsEngine.ts:315` | The components dropped are exactly the tiny additions of strong pigments (Phthalo, Carbon Black) that matter most. |
+| A6 | ✅ **Fixed.** ~~"ΔE₀₀" is really ΔE76.~~ The engine now optimises and reports true CIEDE2000, checked against Sharma et al.'s published test pairs. Plain Euclidean Lab distance. | `physicsEngine.ts` `calculateDeltaE`, `RecipeDisplay.tsx` | It overstates errors in saturated colours. Score this test in ΔE00 (the log sheet does that). |
 | A7 | **The solver is random with no seed.** The same target can give different recipes on different runs. | `physicsEngine.ts` | Always record the recipe you actually mixed. Never re-run the solver to "look it up" again. |
 | A8 | **Targets can only be entered as sRGB hex.** Cadmium, phthalo and quinacridone colours fall outside sRGB and get clipped. | `ColorPicker.tsx` | For this test, choose targets inside sRGB, or accept that the target has shifted. |
 | A9 | **White point bias.** A perfect white (R = 1) maps to Lab (100, 0.65, −0.42), because only Y is normalised on the truncated 20 nm grid. | `physicsEngine.ts` | About 0.8 ΔE of constant bias. Small, but it is the floor. |
-| A10 | **No output in units, no density, no batch rounding.** (Discussed earlier.) | `RecipeDisplay.tsx` | You have to convert by hand for now (see §4). |
+| A10 | ✅ **Fixed.** A Pen Dispense Plan panel now shows units, 60 U pushes, expected mg, mg/U overrides, the minimum batch size and the rounded-recipe ΔE00. | `components/DispensePlan.tsx`, `utils/dispense.ts` | See §4. |
 
 ### Cosmetic, but misleading
 
@@ -92,20 +92,18 @@ the substitution.
 
 ---
 
-## 4. Converting app % to pen units (until A10 is built)
+## 4. Converting app % to pen units
 
-1 U = 10 µL. Pick a batch size, then `units_i = round(pct_i / 100 × batch)`.
+The **Pen Dispense Plan** panel under the recipe does this (1 U = 10 µL).
 
-- **Batch = 100 U (1 ml)** is enough for one 10 mil drawdown on a 2A chart
-  with some spare.
-- **Minimum reliable dose: 5 U** for Fluid (confirm in Phase 0). If any
-  component comes out under 5 U, double the batch or record it as a
-  small-dose case.
-- The app's percentages are fractions of *paint*, and whether they mean mass
-  or volume isn't defined (A4). Dispense by units, weigh, and log both. The
-  analysis fits both interpretations and keeps whichever predicts better.
+- **Batch (U):** 100 U (1 ml) is enough for one 10 mil drawdown on a 2A chart with some spare. Units are rounded so they add up to exactly the batch size (largest-remainder rounding).
+- **Min dose (U):** default 5; set it from your Phase 0 result. Doses below it turn amber, and the panel offers the smallest batch that brings every component above it.
+- **Pushes:** doses over 60 U are split into pushes, e.g. `60 + 25`.
+- **mg/U:** grey values are family estimates. Type in your Phase 0 weighing (mg for 1 U) to replace them. Values are saved in the browser.
+- **Recipe % is by mass / volume:** whether the solver's percentages mean mass or volume isn't known yet (A4). In mass mode, density changes the unit split. Log which mode you used for each swatch.
+- **ΔE₀₀ rounded:** the recipe re-scored *after* rounding to whole units, next to the ideal. If the two differ by more than about 0.5, raise the batch size.
 
----
+The solver is still random (A7), so record the recipe shown for each swatch you mix.
 
 ## 5. Phases
 

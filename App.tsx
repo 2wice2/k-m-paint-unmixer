@@ -5,6 +5,7 @@ import ColorPicker from './components/ColorPicker';
 import PaletteManager from './components/PaletteManager';
 import RecipeDisplay from './components/RecipeDisplay';
 import SpectralChart from './components/SpectralChart';
+import DispensePlan from './components/DispensePlan';
 import { AppState, UnmixResult, LabColor } from './types';
 import { solvePhysicsRecipe } from './services/physicsEngine';
 
@@ -186,6 +187,10 @@ const App: React.FC = () => {
                  liveTime={elapsedTime}
                />
             </div>
+
+            {result && appState === AppState.COMPLETE && (
+              <DispensePlan result={result} targetHex={targetHex} />
+            )}
           </div>
         </main>
       </div>
