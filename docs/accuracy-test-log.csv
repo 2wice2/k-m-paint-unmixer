@@ -1,0 +1,4 @@
+phase,swatch_id,date,paint_line,outlet,component,app_id,nominal_units,weighed_mg,cartridge_fill_date,app_predicted_L,app_predicted_a,app_predicted_b,app_recipe_pct,target_L,target_a,target_b,measured_white_L,measured_white_a,measured_white_b,measured_black_L,measured_black_a,measured_black_b,spectral_file,dry_hours,notes
+0,P0-18G-pw6-05U-01,,Fluid,18G,Titanium White,pw6,5,,,,,,,,,,,,,,,,,,single dose weigh
+2,P2-pb15-10,,Fluid,18G,Phthalo Blue GS,pb15,10,,,,,,,,,,,,,,,,,48,one row per component; same swatch_id
+2,P2-pb15-10,,Fluid,18G,Titanium White,pw6,90,,,,,,,,,,,,,,,,,48,
