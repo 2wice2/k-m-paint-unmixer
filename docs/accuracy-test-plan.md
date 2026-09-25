@@ -54,7 +54,7 @@ switch the engine to two-constant K-M.
 
 | Item | Why | Notes |
 |---|---|---|
-| Resin-printed female pen-thread adapter + outlet | Dispensing | Print **three outlet variants** and pick the best in Phase 0: short 1.5 mm nozzle, 18G blunt luer, 22G blunt luer. Post-cure fully and IPA-wash, because uncured resin will contaminate paint. Resin prints a 6 % luer taper well. |
+| Resin-printed outlet caps ([`hardware/`](../hardware/README.md)) | Dispensing | Screw onto the pen thread. **B:** potted cannula, 18G for Fluid, 21/22G for High Flow. **C:** spigot in a punched septum + Ø1.5 nozzle. Pick the better one in Phase 0. Post-cure fully and IPA-wash, because uncured resin will contaminate paint. |
 | Resin-printed drawdown bar, 10 mil (254 µm) gap | Repeatable film thickness | Print a two-sided 5 / 10 mil bar if you can. Check the gap with feeler gauges. |
 | Resin filling jig | Back-fills cartridges without air | Holds the cartridge vertical, septum-down, while you fill from the plunger end with a 5–10 ml syringe. |
 | **0.001 g scale** | The core instrument | 1 U of paint is roughly 11–17 mg. A 0.01 g scale can't resolve a single unit. |

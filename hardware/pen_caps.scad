@@ -1,38 +1,56 @@
 // Pen-dispenser outlet caps for NovoPen-type insulin pens.
 //
-//   part = "B"  Potted-cannula cap: one straight steel tube, sharp end pierces
-//               the septum, blunt end dispenses. Epoxied into the cap.
-//   part = "C"  Nozzle cap: printed spigot pushes into a hole punched in the
-//               septum (biopsy punch); short printed nozzle with a drip edge.
+//   part = "B"    Potted-cannula cap: one straight steel tube, sharp end pierces
+//                 the septum, blunt end dispenses. Epoxied into the cap.
+//   part = "C"    Nozzle cap: printed spigot pushes into a hole punched in the
+//                 septum (biopsy punch); short printed nozzle with a drip edge.
+//   part = "nose" Reference only (not printed): the pen's male nose as modelled
+//                 in the owner's NovaPen Adapter.prt, for fit reviews.
 //
-// Both screw onto the pen's needle thread (female thread here). The thread
-// only retains the cap; the seal is at the septum (see docs/pen-caps.md).
+// Both caps screw onto the pen's needle thread (female thread here). The thread
+// only retains the cap; the seal is at the septum (see hardware/README.md).
+// The cap floor seats on the pen tip face, so septum depths are measured from
+// that face.
 //
-// !! Thread and septum numbers below are PLACEHOLDERS. Replace them with the
-// !! values from your working Novo adapter before printing.
-//
-// Render:  openscad -D 'part="B"' -o cap_B.stl pen_caps.scad
-// Review:  add -D section=true for a half-section.
+// Render:  openscad -D 'part="B"' -o cap_B.stl --export-format binstl pen_caps.scad
+// Review:  -D section=true for a half-section, -D show_nose=true to overlay the
+//          reference nose screwed fully home.
 
 /* [Selection] */
-part = "B";            // "B" or "C"
+part = "B";            // "B", "C" or "nose"
 section = false;       // cut in half to inspect the paint path
 show_tube = true;      // part B: draw the steel tube (preview only, not printed)
+show_nose = false;     // overlay the reference nose (preview only, not printed)
 
-/* [Pen thread — MEASURE / COPY FROM WORKING ADAPTER] */
-thread_major_d = 7.6;  // pen tip male thread, major diameter (mm)   PLACEHOLDER
-thread_pitch   = 1.0;  // mm                                          PLACEHOLDER
-thread_depth   = 0.55; // radial depth of thread form                 PLACEHOLDER
+/* [Pen thread — from NovaPen Adapter.prt] */
+// Source: NovaPen Adapter.prt (owner's patent-derived model of the pen's male
+// nose). HELIX(2): dia 9.6, pitch 0.8, right hand. SKETCH(7): 60° flanks with
+// R0.2 crest and root rounds, swept and subtracted from a Ø9.6 cylinder.
+// Depth (0.293) follows from pitch, angle and rounds. Checked against NX's
+// STL export of the part: see hardware/README.md.
+thread_major_d = 9.6;  // pen male thread, major diameter
+thread_pitch   = 0.8;
+thread_angle   = 60;   // included flank angle
+thread_round_r = 0.2;  // crest and root radius
 thread_starts  = 1;
-thread_len     = 5.5;  // engaged length                              PLACEHOLDER
 right_hand     = true;
-thread_clear   = 0.20; // radial clearance for resin (tune: 0.15–0.30)
-nose_len       = 0.5;  // pen tip beyond the thread, up to its end face
+thread_clear   = 0.15; // radial allowance: the whole profile moves out by this
+                       // (same convention as the v7 collars r10/r15/r20)
+thread_len     = 4.4;  // engaged female thread (5.5 turns). The adapter's
+                       // thread runs from the tip face back 5.5 mm; keep the
+                       // cap's thread inside the fully formed turns.
+nose_len       = 0.0;  // unthreaded pen tip beyond the thread (model: none)
+lead_in        = 0.8;  // plain counterbore at the open end, before the thread
 
-/* [Cartridge / septum — MEASURE] */
-septum_recess  = 1.0;  // pen tip end face → septum outer surface      PLACEHOLDER
-septum_thick   = 3.0;  // septum thickness                             PLACEHOLDER
-aperture_d     = 4.0;  // hole in the pen tip exposing the septum      PLACEHOLDER
+/* [Cartridge / septum — measured on the pen 2026-09-25] */
+// Real pen: Ø7.4 front entrance (the .prt's tip has a Ø5.8 lip instead); the
+// rubber shows through the hole in the cartridge's aluminium seal.
+pen_entrance_d = 7.4;  // opening in the pen tip (reference nose only)
+aperture_d     = 4.88; // smallest opening in front of the rubber: the seal's hole
+septum_recess  = 0.78; // pen tip face → rubber outer face
+septum_thick   = 2.5;  // ASSUMED: the rubber can't be reached to measure. C's spigot
+                       // goes 2.0 into the rubber and B's tube clears 5.5 of rubber
+                       // plus bevel, so 2.0–3.5 mm septa all work.
 
 /* [Body] */
 wall   = 2.0;
@@ -46,7 +64,7 @@ rib_h  = 0.6;
 tube_od   = 1.270;
 tube_id   = 0.838;
 tube_clear = 0.10;     // diametral clearance for epoxy
-septum_margin = 2.0;   // how far the sharp end goes past the septum
+septum_margin = 3.0;   // sharp end past the septum's inner face; must exceed the bevel length
 boss_d    = 4.0;       // support boss around the tube on the outlet side
 boss_len  = 4.0;
 tube_out  = 8.0;       // exposed blunt tube beyond the boss (shorter = more flow)
@@ -65,10 +83,17 @@ eps = 0.01;
 // ---------------------------------------------------------------------------
 // Derived
 lead      = thread_pitch * thread_starts;
-r_major   = thread_major_d / 2 + thread_clear;          // void outer radius
-r_minor   = thread_major_d / 2 - thread_depth + thread_clear; // void crest radius
+th_h      = thread_angle / 2;
+th_rc     = thread_major_d / 2 - thread_round_r;         // crest round centre radius
+th_rr     = th_rc + (2 * thread_round_r - thread_pitch / 2 * cos(th_h)) / sin(th_h); // root round centre
+th_root   = th_rr - thread_round_r;                      // male minor radius
+th_depth  = thread_major_d / 2 - th_root;
+th_u1     = thread_round_r * cos(th_h);                  // root round ends
+th_u2     = thread_pitch / 2 - thread_round_r * cos(th_h); // crest round starts
+r_major   = thread_major_d / 2 + thread_clear;           // void outer radius
+r_minor   = th_root + thread_clear;                      // void crest radius (cap's thread tips)
 body_r    = r_major + wall;
-cavity_len = thread_len + nose_len;                      // open end → floor
+cavity_len = lead_in + thread_len + nose_len;            // open end → floor (= pen tip face)
 body_len  = cavity_len + floor_t;
 
 b_inner   = septum_recess + septum_thick + septum_margin; // tube past the floor, into the pen
@@ -78,18 +103,28 @@ c_spigot  = septum_recess + septum_thick - spigot_short;  // spigot length past 
 c_path    = c_spigot + floor_t + nozzle_len;
 
 // ---------------------------------------------------------------------------
-// Thread: twisted extrusion of an Archimedean profile gives a true helical
-// thread with a triangular axial form.
-module thread_void(h) {
-  n = 120;
-  pts = [for (i = [0:n-1])
-    let(a = i * 360 / n,
-        ph = (a * thread_starts / 360) % 1,
-        t = ph < 0.5 ? ph * 2 : 2 - ph * 2,
-        r = r_minor + (r_major - r_minor) * t)
-    [r * cos(a), r * sin(a)]];
+// Thread. th_prof(u) is the male profile radius at axial distance u from a
+// root centre (one pitch, |u| <= pitch/2): root round, straight flank, crest
+// round. A cross-section of a helical thread is that profile wrapped once per
+// pitch around the axis; twisting it by one turn per lead sweeps the exact
+// helicoid.
+function th_prof(u) = let(a = abs(u))
+  a <= th_u1 ? th_rr - sqrt(pow(thread_round_r, 2) - a * a)
+  : a >= th_u2 ? th_rc + sqrt(max(0, pow(thread_round_r, 2) - pow(thread_pitch / 2 - a, 2)))
+  : (th_rr - thread_round_r * sin(th_h))
+    + (a - th_u1) * ((th_rc + thread_round_r * sin(th_h)) - (th_rr - thread_round_r * sin(th_h))) / (th_u2 - th_u1);
+
+function th_u(a) = let(x = (lead * a / 360) % thread_pitch)
+  x > thread_pitch / 2 ? x - thread_pitch : x;
+
+// Helical solid whose surface is the thread profile moved out by `clear`.
+// Root centre at angle 0 on its base plane.
+module thread_solid(h, clear) {
+  n = 180;
+  pts = [for (i = [0:n-1]) let(a = i * 360 / n, r = th_prof(th_u(a)) + clear)
+         [r * cos(a), r * sin(a)]];
   linear_extrude(height = h, twist = (right_hand ? -1 : 1) * 360 * h / lead,
-                 slices = ceil(h / lead * 48), convexity = 10)
+                 slices = ceil(h / lead * 72), convexity = 10)
     polygon(pts);
 }
 
@@ -103,11 +138,16 @@ module grip_body() {
 module cap_shell() {
   difference() {
     grip_body();
-    translate([0, 0, -eps]) thread_void(thread_len + eps);
-    // lead-in chamfer
-    translate([0, 0, -eps]) cylinder(r1 = r_major + 0.4, r2 = r_minor, h = 0.8);
-    // nose clearance between thread and floor
-    translate([0, 0, thread_len - eps]) cylinder(r = r_minor, h = nose_len + 2 * eps);
+    // plain lead-in bore with a rim chamfer
+    translate([0, 0, -eps]) cylinder(r = r_major + 0.05, h = lead_in + 2 * eps);
+    translate([0, 0, -eps]) cylinder(r1 = r_major + 0.55, r2 = r_major + 0.05, h = 0.5);
+    // female thread, with a 45° chamfer on its first turn
+    translate([0, 0, lead_in]) rotate(show_nose ? nose_phase() : 0) thread_solid(thread_len + eps, thread_clear);
+    translate([0, 0, lead_in - eps])
+      cylinder(r1 = r_major + 0.05, r2 = r_minor - 0.05, h = r_major - r_minor + 0.1);
+    // relief over any unthreaded pen tip
+    if (nose_len > 0)
+      translate([0, 0, lead_in + thread_len - eps]) cylinder(r = r_major, h = nose_len + 2 * eps);
   }
 }
 
@@ -167,18 +207,68 @@ module part_C() {
 }
 
 // ---------------------------------------------------------------------------
+// Reference nose (NovaPen Adapter.prt), tip face at z = 0, body towards -z.
+// Revolved outline from the part's section, tip opening as measured on the
+// pen; the thread is the same profile with no clearance. Below the shoulder (z < -7.3) the four lugs are drawn as
+// a plain ring, and the 0.8 mm where the swept groove starts is left solid.
+// Good for fit reviews only.
+nose_tip_z   = 9.485;  // tip face height in the .prt
+nose_helix_z = 4.4;    // groove centre at angle 0 where the sweep starts (.prt)
+
+module pen_nose() {
+  z = function(zp) zp - nose_tip_z;
+  t0 = nose_helix_z + thread_pitch;                     // first fully formed turn
+  difference() {
+    union() {
+      translate([0, 0, z(0)]) rotate_extrude($fn = 96) polygon([
+        [4.1, 0], [5.3, 0], [5.5, 0.2], [5.5, 0.95], [5.44, 0.95], [5.44, 2.15],
+        [4.8, 2.15], [4.8, t0 - thread_pitch / 2], [4.1, t0 - thread_pitch / 2]]);
+      // thread: root centre at angle 0 sits at nose_helix_z + k * pitch
+      translate([0, 0, z(t0 - thread_pitch / 2)])
+        rotate((right_hand ? 1 : -1) * 360 * (-thread_pitch / 2) / lead)
+          thread_solid(nose_tip_z - (t0 - thread_pitch / 2), 0);
+    }
+    // Ø8.2 bore, 0.6 front lip opened to the measured entrance (the .prt has
+    // an R0.6-blended end wall with a Ø5.8 hole here)
+    translate([0, 0, z(0)]) rotate_extrude($fn = 96) polygon(
+      [[0, -1], [4.1, -1], [4.1, 8.885], [pen_entrance_d / 2, 8.885],
+       [pen_entrance_d / 2, 10], [0, 10]]);
+  }
+}
+
+// Cap placed on the nose, floor on the tip face, with its thread phased to
+// interleave (the real cap finds its own phase).
+function nose_phase() =
+  let(zb = nose_tip_z - cavity_len + lead_in,           // nose height of the thread base
+      f = ((zb - nose_helix_z) / thread_pitch) % 1)
+  (right_hand ? 1 : -1) * 360 * f * thread_pitch / lead;
+
+// ---------------------------------------------------------------------------
 module assembled() {
   if (part == "B") { part_B(); if (show_tube && $preview) tube_B(); }
   else if (part == "C") part_C();
+  else if (part == "nose") pen_nose();
+}
+
+module placed() {
+  if (show_nose && part != "nose") {
+    // The review overlay moves the cap onto the nose and phases its thread.
+    translate([0, 0, -cavity_len]) assembled();
+    color("lightsteelblue") pen_nose();
+  } else assembled();
 }
 
 if (section)
-  difference() { assembled(); translate([0, -50, -50]) cube(100); }
+  difference() { placed(); translate([0, -50, -50]) cube(100); }
 else
-  assembled();
+  placed();
 
 // ---------------------------------------------------------------------------
 // Report key numbers (shown in the OpenSCAD console)
+echo(str("thread: Ø", thread_major_d, " x ", thread_pitch, " ", right_hand ? "RH" : "LH",
+         ", depth ", round(th_depth * 1000) / 1000, ", cap bore Ø", 2 * r_minor, " / Ø", 2 * r_major,
+         " (radial allowance ", thread_clear, "), engaged ", thread_len,
+         " mm; review phase ", nose_phase()));
 if (part == "B") {
   echo(str("B: cut tube to ", b_tube_len, " mm; sharp end protrudes ", b_inner,
            " mm past the floor; trapped volume ≈ ",
