@@ -4,6 +4,9 @@
 //                 the septum, blunt end dispenses. Epoxied into the cap.
 //   part = "C"    Nozzle cap: printed spigot pushes into a hole punched in the
 //                 septum (biopsy punch); short printed nozzle with a drip edge.
+//   part = "pinB" Pin cap for B: closes the steel tube between sessions. The
+//                 blunt tube end wedges into a tapered socket (set tube_od).
+//   part = "pinC" Pin cap for C: a tapered pin seals the nozzle at its drip edge.
 //   part = "nose" Reference only (not printed): the pen's male nose as modelled
 //                 in the owner's NovaPen Adapter.prt, for fit reviews.
 //
@@ -17,7 +20,7 @@
 //          reference nose screwed fully home.
 
 /* [Selection] */
-part = "B";            // "B", "C" or "nose"
+part = "B";            // "B", "C", "pinB", "pinC" or "nose"
 section = false;       // cut in half to inspect the paint path
 show_tube = true;      // part B: draw the steel tube (preview only, not printed)
 show_nose = false;     // overlay the reference nose (preview only, not printed)
@@ -76,6 +79,16 @@ spigot_short = 0.5;    // stop this far short of the septum's inner face
 nozzle_len = 4.0;      // outside the floor
 nozzle_base_d = 5.0;
 lip_wall   = 0.4;      // thin drip edge at the exit so paint breaks off cleanly
+
+/* [Outlet pin caps] */
+// Storage closures. Both seal on a Luer-style 6 % taper (diameter change per
+// mm), so print tolerance moves where they seat, not whether they seal.
+seal_taper  = 0.06;
+pin_len     = 3.5;     // pinC: pin depth into the nozzle bore below the drip edge
+pin_travel  = 1.2;     // pinC: seating travel allowed either way of nominal
+sock_travel = 2.0;     // pinB: the same for the tube socket
+knob_wall   = 1.2;
+pin_seated  = false;   // true: placed on its outlet (reviews); false: print pose
 
 $fn = 72;
 eps = 0.01;
@@ -244,9 +257,73 @@ function nose_phase() =
   (right_hand ? 1 : -1) * 360 * f * thread_pitch / lead;
 
 // ---------------------------------------------------------------------------
+// Pin caps, modelled seated on their outlet (cap coordinates). Nominally they
+// wedge with no interference; pushing them home adds a few hundredths.
+pinC_top = body_len + nozzle_len + pin_travel + knob_wall;
+pinB_top = body_len + boss_len + tube_out + sock_travel + knob_wall;
+
+// C: a knob over the nozzle, clear of it except where the tapered pin meets
+// the drip edge's bore. The skirt stays clear of cap C's top face.
+module pin_cap_C() {
+  z_tip   = body_len + nozzle_len;
+  z_ceil  = z_tip + pin_travel;
+  z_skirt = body_len + pin_travel;
+  z_pb    = z_tip - pin_len;
+  pin_d   = function(z) bore_d + seal_taper * (z - z_tip);
+  nz_r    = function(z) nozzle_base_d / 2
+            + (bore_d / 2 + lip_wall - nozzle_base_d / 2) * (z - body_len) / nozzle_len;
+  rc = 0.3;                                          // recess clearance over the nozzle
+  kr = nz_r(z_skirt) + rc + knob_wall;
+  difference() {
+    translate([0, 0, z_skirt]) cylinder(r = kr, h = pinC_top - z_skirt);
+    translate([0, 0, z_skirt - eps])
+      cylinder(r1 = nz_r(z_skirt) + rc, r2 = nz_r(z_tip) + rc, h = z_tip - z_skirt + 2 * eps);
+    translate([0, 0, z_tip]) cylinder(r = nz_r(z_tip) + rc, h = z_ceil - z_tip);
+    for (i = [0:7]) rotate(i * 45)                   // grip flutes
+      translate([kr + 0.35, 0, z_skirt - eps]) cylinder(r = 0.6, h = pinC_top - z_skirt + 2 * eps, $fn = 16);
+  }
+  translate([0, 0, z_pb + 0.2])
+    cylinder(d1 = pin_d(z_pb + 0.2), d2 = pin_d(z_ceil), h = z_ceil - z_pb - 0.2 + eps, $fn = 48);
+  translate([0, 0, z_pb]) cylinder(d1 = pin_d(z_pb) - 0.3, d2 = pin_d(z_pb + 0.2), h = 0.2 + eps, $fn = 48);
+  translate([0, 0, z_ceil - 0.4])                    // root fillet
+    cylinder(d1 = pin_d(z_ceil - 0.4), d2 = pin_d(z_ceil) + 0.8, h = 0.4 + eps, $fn = 48);
+}
+
+// B: a knob that slides over the steel tube; the blunt end wedges into a
+// tapered socket and seals on the tube's outside. The lumens of 21G and 22G
+// are too small for a printed pin, so every gauge uses the socket.
+module pin_cap_B() {
+  z_end   = body_len + boss_len + tube_out;
+  z_s0    = z_end - sock_travel;                     // socket mouth
+  z_s1    = z_end + sock_travel;                     // socket bottom
+  z_bot   = body_len + boss_len + 2.0;               // clear of the boss and its epoxy fillet
+  lead_d  = tube_od + 0.25;
+  mouth_d = tube_od + seal_taper * sock_travel;
+  kr = 2.5;
+  difference() {
+    translate([0, 0, z_bot]) cylinder(r = kr, h = pinB_top - z_bot);
+    translate([0, 0, z_bot - eps]) cylinder(d = lead_d, h = z_s0 - z_bot, $fn = 36);
+    translate([0, 0, z_bot - eps]) cylinder(d1 = lead_d + 0.8, d2 = lead_d, h = 0.4, $fn = 36);
+    translate([0, 0, z_s0 - 0.3 - eps]) cylinder(d1 = lead_d, d2 = mouth_d, h = 0.3 + 2 * eps, $fn = 36);
+    translate([0, 0, z_s0])
+      cylinder(d1 = mouth_d, d2 = tube_od - seal_taper * sock_travel, h = z_s1 - z_s0, $fn = 48);
+    for (i = [0:5]) rotate(i * 60)                   // grip flutes
+      translate([kr + 0.3, 0, z_bot - eps]) cylinder(r = 0.55, h = pinB_top - z_bot + 2 * eps, $fn = 16);
+  }
+}
+
+// Print pose: knob top on the plate, pin or socket pointing up.
+module print_pose(ztop) {
+  if (pin_seated) children();
+  else translate([0, 0, ztop]) rotate([180, 0, 0]) children();
+}
+
+// ---------------------------------------------------------------------------
 module assembled() {
   if (part == "B") { part_B(); if (show_tube && $preview) tube_B(); }
   else if (part == "C") part_C();
+  else if (part == "pinB") print_pose(pinB_top) pin_cap_B();
+  else if (part == "pinC") print_pose(pinC_top) pin_cap_C();
   else if (part == "nose") pen_nose();
 }
 
@@ -279,4 +356,14 @@ if (part == "C") {
   echo(str("C: spigot ", c_spigot, " mm long, paint path ", c_path, " mm × Ø", bore_d,
            " mm; trapped volume ≈ ", round(PI * pow(bore_d / 2, 2) * c_path * 10) / 10, " µL",
            "; punch the septum ~", spigot_od - 0.5, " mm"));
+}
+if (part == "pinC") {
+  echo(str("pinC: pin Ø", bore_d - seal_taper * pin_len, " → Ø", bore_d, " at the drip edge (nominal) → Ø",
+           bore_d + seal_taper * pin_travel, " at the root; ", pin_len, " mm into the bore; knob ",
+           pinC_top - body_len - pin_travel, " mm tall"));
+}
+if (part == "pinB") {
+  echo(str("pinB: for tube Ø", tube_od, ", socket Ø", tube_od + seal_taper * sock_travel, " → Ø",
+           tube_od - seal_taper * sock_travel, " over ", 2 * sock_travel, " mm; knob Ø5 × ",
+           pinB_top - body_len - boss_len - 2.0, " mm"));
 }

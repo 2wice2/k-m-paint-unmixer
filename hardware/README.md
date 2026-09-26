@@ -26,10 +26,12 @@ traps ~8–25 U and its luer pockets hold air.
 | `stl/cap_B_21G.stl` | Ø0.919 for 21G (0.819 / 0.514) | High Flow |
 | `stl/cap_B_22G.stl` | Ø0.818 for 22G (0.718 / 0.413) | High Flow |
 | `stl/cap_C.stl` | Ø1.5 paint path | Either; flows ~20× faster than B-18G |
+| `stl/pin_cap_B_18G.stl`, `_21G`, `_22G` | socket for that tube's OD | Closes B between sessions |
+| `stl/pin_cap_C.stl` | pin for the Ø1.5 nozzle | Closes C between sessions |
 
-The tube bores include 0.10 mm diametral clearance for epoxy. All four are
-binary STLs in millimetres, printed axis-vertical. Source:
-[`pen_caps.scad`](pen_caps.scad).
+The tube bores include 0.10 mm diametral clearance for epoxy. All files are
+binary STLs in millimetres, printed axis-vertical (the pin caps are already
+posed knob-down). Source: [`pen_caps.scad`](pen_caps.scad).
 
 ## Pen thread
 
@@ -96,6 +98,32 @@ Tube lumen volume: 11.2 µL (18G), 4.2 µL (21G), 2.7 µL (22G).
 Paint path: 15.5 µL. The part of the punched hole left below the spigot adds
 ~4.9 µL per mm of rubber beyond 2.0 mm.
 
+## Pin caps (storage between sessions)
+
+![Pin caps seated on their outlets](renders/pin_caps_section.png)
+
+Both pin caps seal on a Luer-style 6 % taper. The cap wedges wherever its
+taper meets the outlet, so a pin or socket that prints a little over- or
+undersize just seats higher or lower (1.2 mm of travel for C, 2 mm for B)
+and still seals. Nothing else touches.
+
+- **Pin cap C:** a knob over the nozzle. Its pin (Ø1.29 tip to Ø1.57 root)
+  goes 3.5 mm into the bore and seals as a ring at the drip edge.
+  - Some paint squeezes out as the pin goes in, so wipe the nozzle.
+  - Taking the cap off leaves about 5 µL (½ U) of the nozzle empty. Push
+    1 U to waste before a measured dose.
+- **Pin cap B:** a knob that slides over the steel tube. The blunt tube end
+  wedges into a tapered socket (tube OD +0.12 → −0.12 over 4 mm) and seals on
+  the tube's outside.
+  - The lumens of 21G and 22G are too small for a printed pin, so every gauge
+    uses a socket. Print the file that matches your tube.
+  - No air gets into the tube, so no priming is needed.
+
+Push each one home with a slight twist. Flush uncured resin out of the
+socket and off the pin with IPA, but don't ream them: that would destroy the
+taper. If one won't seat, sand the pin lightly or open the socket mouth with
+a hand-turned drill one size up.
+
 ## Leak and volume checks
 
 - **Leak test:** fill with dyed water, block the outlet, hold the button for
@@ -107,7 +135,11 @@ Paint path: 15.5 µL. The part of the punched hole left below the spigot adds
 ```bash
 openscad -D 'part="B"' -D tube_od=1.270 -D tube_id=0.838 -o stl/cap_B_18G.stl --export-format binstl pen_caps.scad
 openscad -D 'part="C"' -o stl/cap_C.stl --export-format binstl pen_caps.scad
+openscad -D 'part="pinB"' -D tube_od=1.270 -o stl/pin_cap_B_18G.stl --export-format binstl pen_caps.scad
+openscad -D 'part="pinC"' -o stl/pin_cap_C.stl --export-format binstl pen_caps.scad
 ```
+
+Add `-D pin_seated=true` to place a pin cap on its outlet for a fit review.
 
 A binary STL's size must equal 84 + 50 × its triangle count (header bytes 80–83).
 
@@ -129,6 +161,12 @@ of `NovaPen Adapter.prt` over the fully formed thread:
 - binary, with size = 84 + 50 × triangles;
 - watertight single solids with consistent winding;
 - floor bores as designed (1.370 / 0.919 / 0.818 / 1.497 mm).
+
+**Pin caps (2026-09-26):** all four are binary, watertight single solids,
+flat on the build plate. Seated nominally, each touches its outlet only at
+the seal ring. Pushing it 0.05–0.10 mm further builds the interference that
+seals. Cap C's pin cap was checked against `cap_C.stl`, and B's against
+18G and 22G tubes and the boss.
 
 Not yet tested physically: print fit on the pen, septum seal, leak
 test, trapped volume, flow.
