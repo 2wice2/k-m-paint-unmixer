@@ -51,7 +51,7 @@ patent-derived model of the pen's male nose, read natively in NX.
 overlays it. OpenSCAD 2021.01's preview garbles the twisted thread in cut
 views, so review from rendered meshes, as in `renders/caps_section.png`.
 
-## Measured on the pen (2026-09-25)
+## Measured on the pen (2026-09-25/26)
 
 | Dimension | Value |
 |---|---|
@@ -59,17 +59,13 @@ views, so review from rendered meshes, as in `renders/caps_section.png`.
 | Hole in the cartridge's aluminium seal | Ø4.88 |
 | Pen front entrance | Ø7.4 (the .prt's Ø5.8 lip is not on the real pen) |
 | Unthreaded tip beyond the thread | none |
-| Septum (rubber) thickness | **not measurable**; 2.5 mm assumed |
+| Septum (rubber) thickness | 2.0 mm |
 
-The design tolerates the unknown septum thickness:
-
-- **C:** the spigot is 2.78 mm long and enters 2.0 mm into the rubber,
-  whatever its thickness.
-- **B:** the sharp end reaches 6.28 mm past the floor, which clears up to
-  5.5 mm of rubber plus bevel.
-
-To refine this, measure the length of the rubber core the biopsy punch removes
-and set `septum_thick`.
+- **C:** the spigot is 2.28 mm long. It seals over 1.5 mm of rubber and stops
+  0.5 mm short of the rubber's inner face (`spigot_short`), so it can't reach
+  the glass.
+- **B:** the sharp end reaches 5.78 mm past the floor: through the rubber plus
+  3.0 mm for the bevel, which hasn't been measured.
 
 ## Print and prepare
 
@@ -81,13 +77,13 @@ and set `septum_thick`.
 
 ## Assemble B
 
-1. Cut the tube to **20.3 mm**.
-2. Set the sharp (bevel) end **6.28 mm** past the inside of the floor, which
+1. Cut the tube to **19.8 mm**.
+2. Set the sharp (bevel) end **5.78 mm** past the inside of the floor, which
    leaves 8.0 mm of blunt tube beyond the boss.
 3. Epoxy from both fillet wells. Keep the pen-side fillet flush with the floor:
    the seal's top is only ~0.5 mm below it.
 
-Tube lumen volume: 11.2 µL (18G), 4.2 µL (21G), 2.7 µL (22G).
+Tube lumen volume: 10.9 µL (18G), 4.1 µL (21G), 2.6 µL (22G).
 
 ## Assemble C
 
@@ -95,8 +91,8 @@ Tube lumen volume: 11.2 µL (18G), 4.2 µL (21G), 2.7 µL (22G).
 2. Screw the cap on: the Ø3.0 spigot enters the hole with 0.25 mm radial
    interference.
 
-Paint path: 15.5 µL. The part of the punched hole left below the spigot adds
-~4.9 µL per mm of rubber beyond 2.0 mm.
+Paint path: 14.6 µL, plus ~2.5 µL in the 0.5 mm of punched hole below the
+spigot: about 17 µL in all.
 
 ## Pin caps (storage between sessions)
 

@@ -45,15 +45,13 @@ thread_len     = 4.4;  // engaged female thread (5.5 turns). The adapter's
 nose_len       = 0.0;  // unthreaded pen tip beyond the thread (model: none)
 lead_in        = 0.8;  // plain counterbore at the open end, before the thread
 
-/* [Cartridge / septum — measured on the pen 2026-09-25] */
+/* [Cartridge / septum — measured on the pen 2026-09-25/26] */
 // Real pen: Ø7.4 front entrance (the .prt's tip has a Ø5.8 lip instead); the
 // rubber shows through the hole in the cartridge's aluminium seal.
 pen_entrance_d = 7.4;  // opening in the pen tip (reference nose only)
 aperture_d     = 4.88; // smallest opening in front of the rubber: the seal's hole
 septum_recess  = 0.78; // pen tip face → rubber outer face
-septum_thick   = 2.5;  // ASSUMED: the rubber can't be reached to measure. C's spigot
-                       // goes 2.0 into the rubber and B's tube clears 5.5 of rubber
-                       // plus bevel, so 2.0–3.5 mm septa all work.
+septum_thick   = 2.0;  // rubber thickness
 
 /* [Body] */
 wall   = 2.0;
@@ -67,7 +65,8 @@ rib_h  = 0.6;
 tube_od   = 1.270;
 tube_id   = 0.838;
 tube_clear = 0.10;     // diametral clearance for epoxy
-septum_margin = 3.0;   // sharp end past the septum's inner face; must exceed the bevel length
+septum_margin = 3.0;   // sharp end past the septum's inner face; must exceed the
+                       // bevel length (not measured; 3.0 covers a short-bevel 18G)
 boss_d    = 4.0;       // support boss around the tube on the outlet side
 boss_len  = 4.0;
 tube_out  = 8.0;       // exposed blunt tube beyond the boss (shorter = more flow)
